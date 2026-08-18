@@ -1,0 +1,98 @@
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap');
+
+:root {
+  --bg-color: #f5f5f7;
+  --text-color: #333;
+  --primary-color: #007aff;
+  --primary-hover: #005bb5;
+  --success-color: #34c759;
+  --success-hover: #2da94f;
+  --danger-color: #ff3b30;
+  --danger-hover: #d63028;
+  --warning-color: #ff9500;
+  --warning-hover: #d17a00;
+  --glass-bg: rgba(255, 255, 255, 0.85);
+  --glass-border: rgba(255, 255, 255, 0.4);
+  --glass-shadow: 0 8px 32px rgba(0, 0, 0, 0.1);
+  --glass-blur: blur(12px);
+}
+
+body {
+  margin: 0;
+  overflow: hidden;
+  background-color: var(--bg-color);
+  font-family: 'Inter', -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+  color: var(--text-color);
+  
+  /* Prevent misoperation on iPad */
+  touch-action: none;
+  -webkit-touch-callout: none;
+  -webkit-user-select: none;
+  user-select: none;
+}
+
+.layer-canvas {
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  pointer-events: none;
+}
+
+/* Glassmorphism Utilities */
+.glass-panel {
+  background: var(--glass-bg);
+  backdrop-filter: var(--glass-blur);
+  -webkit-backdrop-filter: var(--glass-blur);
+  border: 1px solid var(--glass-border);
+  border-radius: 16px;
+  box-shadow: var(--glass-shadow);
+}
+
+.glass-button {
+  padding: 12px 20px;
+  font-size: 15px;
+  font-weight: 600;
+  border-radius: 24px;
+  border: none;
+  cursor: pointer;
+  transition: all 0.2s cubic-bezier(0.25, 0.8, 0.25, 1);
+  box-shadow: 0 4px 12px rgba(0,0,0,0.05);
+}
+
+.glass-button:active {
+  transform: scale(0.95);
+}
+
+/* Specific button styles */
+.btn-primary { background: var(--primary-color); color: white; box-shadow: 0 4px 12px rgba(0, 122, 255, 0.3); }
+.btn-primary:hover { background: var(--primary-hover); }
+.btn-primary.outline { background: white; color: var(--primary-color); border: 2px solid var(--primary-color); }
+.btn-primary.outline.active { background: var(--primary-color); color: white; }
+
+.btn-success { background: var(--success-color); color: white; box-shadow: 0 4px 12px rgba(52, 199, 89, 0.3); }
+.btn-success:hover { background: var(--success-hover); }
+
+.btn-danger { background: var(--danger-color); color: white; box-shadow: 0 4px 12px rgba(255, 59, 48, 0.3); }
+.btn-danger:hover { background: var(--danger-hover); }
+
+.btn-warning { background: var(--warning-color); color: white; box-shadow: 0 4px 12px rgba(255, 149, 0, 0.3); }
+.btn-warning:hover { background: var(--warning-hover); }
+
+.btn-light { background: white; color: #333; }
+.btn-light:hover { background: #f0f0f0; }
+
+.btn-tool {
+  padding: 10px 16px;
+  font-size: 14px;
+  font-weight: 600;
+  border-radius: 20px;
+  border: none;
+  cursor: pointer;
+  transition: 0.2s;
+  background: #e0e0e0;
+  color: #333;
+}
+.btn-tool:hover { background: #d0d0d0; }
+.btn-tool.active { background: #607d8b; color: white; }
