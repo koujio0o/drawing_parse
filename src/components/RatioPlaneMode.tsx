@@ -2,16 +2,12 @@ import { useEffect, useRef, useState } from 'react';
 import * as THREE from 'three';
 import gifshot from 'gifshot';
 
-const COLORS = ['#607d8b', '#ff3b30', '#34c759', '#007aff', '#111111'];
+const COLORS = ['#607d8b', '#ab47bc', '#81c784', '#64b5f6', '#111111'];
 
 export default function RatioPlaneMode() {
   const mainCanvasRef = useRef<HTMLCanvasElement>(null);
   const drawCanvasRef = useRef<HTMLCanvasElement>(null);
-  const thumbnailCanvasRef = useRef<HTMLCanvasElement>(null);
 
-  const [fov, setFov] = useState(50);
-  const [rx, setRx] = useState(30);
-  const [ry, setRy] = useState(45);
   const [currentTool, setCurrentTool] = useState<'pen' | 'eraser'>('pen');
   const [currentColor, setCurrentColor] = useState<string>(COLORS[0]);
   const [isGridVisible, setIsGridVisible] = useState(false);
@@ -20,17 +16,22 @@ export default function RatioPlaneMode() {
   
   const [modeType, setModeType] = useState<'rectangle' | 'triangle'>('rectangle');
 
-  const sr = useRef({ fov: 50, rx: 30, ry: 45, zoom: 1.0, isGridVisible: false, isAnswerVisible: false, modeType: 'rectangle', currentAngle: 45 });
+  const [answerRatio, setAnswerRatio] = useState({ x: 1, y: 1 });
+  const [userRatio, setUserRatio] = useState({ x: 1, y: 1 });
+
+  const sr = useRef({ 
+    zoom: 1.0, isGridVisible: false, isAnswerVisible: false, modeType: 'rectangle', 
+    currentAngle: 45, trueX: 1, trueY: 1, userX: 1, userY: 1 
+  });
 
   const refs = useRef({
     scene: null as THREE.Scene | null,
-    camera: null as THREE.PerspectiveCamera | null,
-    thumbnailCamera: null as THREE.PerspectiveCamera | null,
+    camera: null as THREE.OrthographicCamera | null,
     mainRenderer: null as THREE.WebGLRenderer | null,
-    thumbnailRenderer: null as THREE.WebGLRenderer | null,
     targetGroup: null as THREE.Group | null,
     gridGroup: null as THREE.Group | null,
     answerGroup: null as THREE.Group | null,
+    userGroup: null as THREE.Group | null,
     isDrawing: false,
     lastX: 0,
     lastY: 0,
@@ -42,48 +43,39 @@ export default function RatioPlaneMode() {
 
   const renderScene = () => {
     const r = refs.current;
-    if (!r.scene || !r.camera || !r.mainRenderer || !r.thumbnailRenderer || !r.thumbnailCamera || !r.targetGroup) return;
+    if (!r.scene || !r.camera || !r.mainRenderer || !r.targetGroup) return;
     
     const state = sr.current;
 
-    r.camera.fov = state.fov;
-    r.thumbnailCamera.fov = state.fov;
-    const baseZ = 40;
-    const zPos = (baseZ / Math.tan((state.fov * Math.PI / 180) / 2)) / state.zoom;
-    r.camera.position.z = zPos;
-    r.thumbnailCamera.position.z = zPos;
+    const aspect = window.innerWidth / window.innerHeight;
+    const viewSize = 30 / state.zoom;
+    r.camera.left = -aspect * viewSize / 2;
+    r.camera.right = aspect * viewSize / 2;
+    r.camera.top = viewSize / 2;
+    r.camera.bottom = -viewSize / 2;
     r.camera.updateProjectionMatrix();
-    r.thumbnailCamera.updateProjectionMatrix();
-
-    r.targetGroup.rotation.set(state.rx * Math.PI / 180, state.ry * Math.PI / 180, 0);
-    r.targetGroup.updateMatrixWorld(true);
 
     if (r.gridGroup) r.gridGroup.visible = state.isGridVisible;
 
     r.scene.updateMatrixWorld(true);
 
     if (r.answerGroup) r.answerGroup.visible = state.isAnswerVisible;
+    if (r.userGroup) r.userGroup.visible = state.isAnswerVisible;
+    
     r.mainRenderer.render(r.scene, r.camera);
-
-    if (r.answerGroup) r.answerGroup.visible = true;
-    r.thumbnailRenderer.render(r.scene, r.thumbnailCamera);
-
-    if (r.answerGroup) r.answerGroup.visible = state.isAnswerVisible;
   };
 
-  const setRxSync = (v: number) => { sr.current.rx = v; setRx(v); renderScene(); };
-  const setRySync = (v: number) => { sr.current.ry = v; setRy(v); renderScene(); };
   const setZoomSync = (v: number | ((z: number) => number)) => {
     const newZ = typeof v === 'function' ? v(sr.current.zoom) : v;
     sr.current.zoom = newZ; renderScene();
   };
-  const setFovSync = (v: number) => { sr.current.fov = v; setFov(v); renderScene(); };
   const setGridSync = (v: boolean) => { sr.current.isGridVisible = v; setIsGridVisible(v); renderScene(); };
   const setAnswerSync = (v: boolean) => { sr.current.isAnswerVisible = v; setIsAnswerVisible(v); renderScene(); };
 
   useEffect(() => {
     sr.current.modeType = modeType;
     generateRandomBlock();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [modeType]);
 
   useEffect(() => {
@@ -95,28 +87,21 @@ export default function RatioPlaneMode() {
 
     const scene = new THREE.Scene();
     scene.background = new THREE.Color(0xf5f5f7);
-    const camera = new THREE.PerspectiveCamera(50, window.innerWidth / window.innerHeight, 0.1, 500);
-    camera.lookAt(0, 0, 0);
     
-    const thumbnailCamera = new THREE.PerspectiveCamera(50, 1, 0.1, 500);
-    thumbnailCamera.lookAt(0, 0, 0);
+    const aspect = window.innerWidth / window.innerHeight;
+    const viewSize = 30;
+    const camera = new THREE.OrthographicCamera(-aspect * viewSize / 2, aspect * viewSize / 2, viewSize / 2, -viewSize / 2, 0.1, 500);
+    camera.position.z = 10;
+    camera.lookAt(0, 0, 0);
 
     const mainRenderer = new THREE.WebGLRenderer({ canvas: mainCanvasRef.current!, antialias: true, preserveDrawingBuffer: true });
     mainRenderer.setPixelRatio(window.devicePixelRatio);
     
-    const thumbnailRenderer = new THREE.WebGLRenderer({ canvas: thumbnailCanvasRef.current!, antialias: true });
-    thumbnailRenderer.setPixelRatio(window.devicePixelRatio);
-    
-    scene.add(new THREE.AmbientLight(0xffffff, 0.8));
-    const dirLight = new THREE.DirectionalLight(0xffffff, 0.6);
-    dirLight.position.set(10, 20, 10);
-    scene.add(dirLight);
+    scene.add(new THREE.AmbientLight(0xffffff, 1.0));
 
     refs.current.scene = scene;
     refs.current.camera = camera;
-    refs.current.thumbnailCamera = thumbnailCamera;
     refs.current.mainRenderer = mainRenderer;
-    refs.current.thumbnailRenderer = thumbnailRenderer;
 
     const onResize = () => {
       const w = window.innerWidth;
@@ -127,21 +112,13 @@ export default function RatioPlaneMode() {
       cDraw.width = w; cDraw.height = h;
       mainRenderer.setSize(w, h);
       
-      if (thumbnailCanvasRef.current) {
-        thumbnailRenderer.setSize(thumbnailCanvasRef.current.clientWidth, thumbnailCanvasRef.current.clientHeight, false);
-      }
-      
       if (r.ctxDraw) {
         r.ctxDraw.lineCap = 'round';
         r.ctxDraw.lineJoin = 'round';
         if (tempImageData) r.ctxDraw.putImageData(tempImageData, 0, 0);
       }
       
-      if (r.camera) {
-        r.camera.aspect = w / h;
-        r.camera.updateProjectionMatrix();
-        renderScene();
-      }
+      renderScene();
     };
     window.addEventListener('resize', onResize);
     onResize();
@@ -151,21 +128,21 @@ export default function RatioPlaneMode() {
     return () => {
       window.removeEventListener('contextmenu', onContextMenu);
       window.removeEventListener('resize', onResize);
-      thumbnailRenderer.dispose();
       mainRenderer.dispose();
     };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   const createTextSprite = (text: string, color: string) => {
     const canvas = document.createElement('canvas');
-    canvas.width = 256;
-    canvas.height = 128;
+    canvas.width = 512;
+    canvas.height = 256;
     const ctx = canvas.getContext('2d')!;
     ctx.fillStyle = color;
-    ctx.font = 'bold 80px Arial';
+    ctx.font = 'bold 120px Arial';
     ctx.textAlign = 'center';
     ctx.textBaseline = 'middle';
-    ctx.fillText(text, 128, 64);
+    ctx.fillText(text, 256, 128);
     
     const tex = new THREE.CanvasTexture(canvas);
     const spriteMat = new THREE.SpriteMaterial({ map: tex, depthTest: false });
@@ -173,6 +150,75 @@ export default function RatioPlaneMode() {
     sprite.scale.set(10, 5, 1);
     return sprite;
   };
+
+  const cylGeo = new THREE.CylinderGeometry(1, 1, 1, 8);
+  cylGeo.rotateX(Math.PI / 2);
+  const addThickLine = (group: THREE.Group, p1: THREE.Vector3, p2: THREE.Vector3, mat: THREE.Material, radius: number) => {
+    const dist = p1.distanceTo(p2);
+    if (dist < 0.01) return;
+    const mesh = new THREE.Mesh(cylGeo, mat);
+    mesh.position.copy(p1).lerp(p2, 0.5);
+    mesh.scale.set(radius, radius, dist);
+    mesh.lookAt(p2);
+    group.add(mesh);
+  };
+
+  const updateUserGroup = () => {
+    if (sr.current.modeType !== 'rectangle') return;
+    const r = refs.current;
+    if (!r.targetGroup) return;
+
+    if (r.userGroup) {
+      r.userGroup.traverse((child) => {
+        if ((child as THREE.Mesh).geometry) (child as THREE.Mesh).geometry.dispose();
+        if ((child as THREE.Mesh).material) {
+          const mat = (child as THREE.Mesh).material;
+          if (Array.isArray(mat)) mat.forEach(m => m.dispose());
+          else mat.dispose();
+        }
+      });
+      r.targetGroup.remove(r.userGroup);
+    }
+    r.userGroup = new THREE.Group();
+
+    const maxDim = Math.max(sr.current.trueX, sr.current.trueY);
+    const unitSize = 20 / maxDim;
+    
+    const origW = sr.current.trueX * unitSize;
+    const origH = sr.current.trueY * unitSize;
+
+    const w = sr.current.userX * unitSize;
+    const h = sr.current.userY * unitSize;
+
+    const geo = new THREE.PlaneGeometry(w, h);
+    const faceMat = new THREE.MeshBasicMaterial({ color: 0x81c784, transparent: true, opacity: 0.3, side: THREE.DoubleSide, polygonOffset: true, polygonOffsetFactor: -2, polygonOffsetUnits: -2 });
+    const mesh = new THREE.Mesh(geo, faceMat);
+    mesh.position.set((w - origW) / 2, (h - origH) / 2, 0);
+    r.userGroup.add(mesh);
+
+    const edgeMat = new THREE.MeshBasicMaterial({ color: 0x388e3c });
+    const p1 = new THREE.Vector3(-w/2, -h/2, 0).add(mesh.position);
+    const p2 = new THREE.Vector3(w/2, -h/2, 0).add(mesh.position);
+    const p3 = new THREE.Vector3(w/2, h/2, 0).add(mesh.position);
+    const p4 = new THREE.Vector3(-w/2, h/2, 0).add(mesh.position);
+    
+    addThickLine(r.userGroup, p1, p2, edgeMat, 0.1);
+    addThickLine(r.userGroup, p2, p3, edgeMat, 0.1);
+    addThickLine(r.userGroup, p3, p4, edgeMat, 0.1);
+    addThickLine(r.userGroup, p4, p1, edgeMat, 0.1);
+
+    r.userGroup.visible = sr.current.isAnswerVisible;
+    r.targetGroup.add(r.userGroup);
+
+    renderScene();
+  };
+
+  useEffect(() => {
+    sr.current.userX = userRatio.x;
+    sr.current.userY = userRatio.y;
+    updateUserGroup();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [userRatio]);
 
   const generateRandomBlock = () => {
     const r = refs.current;
@@ -192,30 +238,29 @@ export default function RatioPlaneMode() {
     r.targetGroup = new THREE.Group();
     r.answerGroup = new THREE.Group();
 
-    const unitSize = 4;
-    const lineRadius = 0.05;
-    const cylGeo = new THREE.CylinderGeometry(lineRadius, lineRadius, 1, 8);
-    cylGeo.rotateX(Math.PI / 2);
-    
-    const addThickLine = (group: THREE.Group, p1: THREE.Vector3, p2: THREE.Vector3, mat: THREE.Material, scaleThickness = 1) => {
-      const dist = p1.distanceTo(p2);
-      if (dist < 0.01) return;
-      const mesh = new THREE.Mesh(cylGeo, mat);
-      mesh.position.copy(p1).lerp(p2, 0.5);
-      mesh.scale.set(scaleThickness, scaleThickness, dist);
-      mesh.lookAt(p2);
-      group.add(mesh);
-    };
-
     const blackMat = new THREE.MeshBasicMaterial({ color: 0x333333 });
-    const redMat = new THREE.MeshBasicMaterial({ color: 0xff3b30 });
+    const frameOneMat = new THREE.MeshBasicMaterial({ color: 0xab47bc }); // Purple
     const faceMat = new THREE.MeshBasicMaterial({ color: 0x007aff, transparent: true, opacity: 0.1, side: THREE.DoubleSide });
-    const answerSolidMat = new THREE.MeshBasicMaterial({ color: 0xf5f5f7, transparent: true, opacity: 0.8, side: THREE.DoubleSide, polygonOffset: true, polygonOffsetFactor: 1, polygonOffsetUnits: 1 });
 
     if (sr.current.modeType === 'rectangle') {
-      const sizes = [1, 2, 3, 4, 5].sort(() => Math.random() - 0.5);
-      const x = sizes[0];
-      const y = sizes[1];
+      const getRandomSizePlane = () => {
+        const val = 1.0 + Math.floor(Math.random() * 31) * 0.1; 
+        return Math.round(val * 10) / 10;
+      };
+
+      let x = getRandomSizePlane();
+      let y = getRandomSizePlane();
+      if (x !== 1 && y !== 1) {
+        if (Math.random() > 0.5) x = 1; else y = 1;
+      }
+      
+      sr.current.trueX = x;
+      sr.current.trueY = y;
+      setAnswerRatio({ x, y });
+      setUserRatio({ x, y });
+
+      const maxDim = Math.max(x, y);
+      const unitSize = 20 / maxDim;
       
       const w = x * unitSize;
       const h = y * unitSize;
@@ -224,95 +269,90 @@ export default function RatioPlaneMode() {
       const plane = new THREE.Mesh(geo, faceMat);
       r.targetGroup.add(plane);
 
-      // Draw border
       const p1 = new THREE.Vector3(-w/2, -h/2, 0);
       const p2 = new THREE.Vector3(w/2, -h/2, 0);
       const p3 = new THREE.Vector3(w/2, h/2, 0);
       const p4 = new THREE.Vector3(-w/2, h/2, 0);
 
-      // Highlight the side with length 1 if exists
+      const randomZ = (Math.random() - 0.5) * Math.PI;
+      r.targetGroup.rotation.z = randomZ;
+
       const isX1 = x === 1;
       const isY1 = y === 1;
 
-      addThickLine(r.targetGroup, p1, p2, isX1 ? redMat : blackMat, isX1 ? 2 : 1);
-      addThickLine(r.targetGroup, p2, p3, isY1 ? redMat : blackMat, isY1 ? 2 : 1);
-      addThickLine(r.targetGroup, p3, p4, isX1 ? redMat : blackMat, isX1 ? 2 : 1);
-      addThickLine(r.targetGroup, p4, p1, isY1 ? redMat : blackMat, isY1 ? 2 : 1);
+      addThickLine(r.targetGroup, p1, p2, isX1 ? frameOneMat : blackMat, isX1 ? 0.16 : 0.08);
+      addThickLine(r.targetGroup, p2, p3, isY1 ? frameOneMat : blackMat, isY1 ? 0.16 : 0.08);
+      addThickLine(r.targetGroup, p3, p4, isX1 ? frameOneMat : blackMat, isX1 ? 0.16 : 0.08);
+      addThickLine(r.targetGroup, p4, p1, isY1 ? frameOneMat : blackMat, isY1 ? 0.16 : 0.08);
 
-      // Answer Group
-      const aPlane = new THREE.Mesh(geo, answerSolidMat);
-      r.answerGroup.add(aPlane);
-      
+      const gridInnerMat = new THREE.MeshBasicMaterial({ color: 0x64b5f6 }); // Light blue
+
       for (let ix = 0; ix <= x; ix++) {
         const px = -w/2 + ix * unitSize;
-        addThickLine(r.answerGroup, new THREE.Vector3(px, -h/2, 0), new THREE.Vector3(px, h/2, 0), redMat);
+        addThickLine(r.answerGroup, new THREE.Vector3(px, -h/2, 0.1), new THREE.Vector3(px, h/2, 0.1), gridInnerMat, 0.06);
       }
       for (let iy = 0; iy <= y; iy++) {
         const py = -h/2 + iy * unitSize;
-        addThickLine(r.answerGroup, new THREE.Vector3(-w/2, py, 0), new THREE.Vector3(w/2, py, 0), redMat);
+        addThickLine(r.answerGroup, new THREE.Vector3(-w/2, py, 0.1), new THREE.Vector3(w/2, py, 0.1), gridInnerMat, 0.06);
       }
 
+      updateUserGroup();
+
     } else {
-      // Right Triangle
       const angles = [30, 45, 60];
       const theta = angles[Math.floor(Math.random() * angles.length)];
       sr.current.currentAngle = theta;
-
-      const base = 10;
+      const angle2 = 90 - theta;
+      
+      const base = 20;
       const height = base * Math.tan(theta * Math.PI / 180);
+      
+      const maxDim = Math.max(base, height);
+      const scale = 20 / maxDim;
+      const sBase = base * scale;
+      const sHeight = height * scale;
 
       const shape = new THREE.Shape();
       shape.moveTo(0, 0);
-      shape.lineTo(base, 0);
-      shape.lineTo(0, height);
+      shape.lineTo(sBase, 0);
+      shape.lineTo(0, sHeight);
       shape.lineTo(0, 0);
 
       const geo = new THREE.ShapeGeometry(shape);
       const mesh = new THREE.Mesh(geo, faceMat);
       
-      // Center it
-      mesh.position.set(-base/2, -height/2, 0);
+      mesh.position.set(-sBase/2, -sHeight/2, 0);
       
       const triGroup = new THREE.Group();
       triGroup.add(mesh);
 
-      const p1 = new THREE.Vector3(-base/2, -height/2, 0);
-      const p2 = new THREE.Vector3(base/2, -height/2, 0);
-      const p3 = new THREE.Vector3(-base/2, height/2, 0);
+      const p1 = new THREE.Vector3(-sBase/2, -sHeight/2, 0);
+      const p2 = new THREE.Vector3(sBase/2, -sHeight/2, 0);
+      const p3 = new THREE.Vector3(-sBase/2, sHeight/2, 0);
       
-      addThickLine(triGroup, p1, p2, blackMat);
-      addThickLine(triGroup, p2, p3, blackMat);
-      addThickLine(triGroup, p3, p1, blackMat);
+      addThickLine(triGroup, p1, p2, blackMat, 0.08);
+      addThickLine(triGroup, p2, p3, blackMat, 0.08);
+      addThickLine(triGroup, p3, p1, blackMat, 0.08);
 
-      // Draw right angle symbol at p1
       const size = 1.5;
-      addThickLine(triGroup, new THREE.Vector3(p1.x + size, p1.y, 0), new THREE.Vector3(p1.x + size, p1.y + size, 0), blackMat, 0.5);
-      addThickLine(triGroup, new THREE.Vector3(p1.x + size, p1.y + size, 0), new THREE.Vector3(p1.x, p1.y + size, 0), blackMat, 0.5);
+      addThickLine(triGroup, new THREE.Vector3(p1.x + size, p1.y, 0), new THREE.Vector3(p1.x + size, p1.y + size, 0), blackMat, 0.05);
+      addThickLine(triGroup, new THREE.Vector3(p1.x + size, p1.y + size, 0), new THREE.Vector3(p1.x, p1.y + size, 0), blackMat, 0.05);
 
       r.targetGroup.add(triGroup);
+      r.targetGroup.rotation.z = Math.random() * Math.PI * 2;
 
-      // Answer Group
-      const aMesh = new THREE.Mesh(geo, answerSolidMat);
-      aMesh.position.set(-base/2, -height/2, 0);
-      r.answerGroup.add(aMesh);
-
-      // Show angle text
-      const angle2 = 90 - theta;
-      const sprite1 = createTextSprite(`${theta}°`, '#ff3b30');
-      // Position near p2
-      sprite1.position.set(p2.x - 2.5, p2.y + 1, 0.1);
+      const sprite1 = createTextSprite(`${theta}°`, '#ab47bc');
+      sprite1.position.set(p2.x - 3, p2.y + 1.5, 0.1);
       r.answerGroup.add(sprite1);
 
-      const sprite2 = createTextSprite(`${angle2}°`, '#007aff');
-      // Position near p3
-      sprite2.position.set(p3.x + 1.5, p3.y - 2.5, 0.1);
+      const sprite2 = createTextSprite(`${angle2}°`, '#64b5f6');
+      sprite2.position.set(p3.x + 2, p3.y - 3, 0.1);
       r.answerGroup.add(sprite2);
     }
 
     r.answerGroup.visible = sr.current.isAnswerVisible;
     r.targetGroup.add(r.answerGroup);
 
-    // Grid
     if (r.gridGroup) {
       r.gridGroup.traverse((child) => {
         if ((child as THREE.LineSegments).geometry) (child as THREE.LineSegments).geometry.dispose();
@@ -322,20 +362,15 @@ export default function RatioPlaneMode() {
     }
     r.gridGroup = new THREE.Group();
     const gridColor = 0x007aff;
-    const gridXZ = new THREE.GridHelper(100, 25, gridColor, gridColor); gridXZ.material = new THREE.LineBasicMaterial({ color: gridColor, transparent: true, opacity: 0.15 });
-    const gridXY = new THREE.GridHelper(100, 25, gridColor, gridColor); gridXY.rotation.x = Math.PI / 2; gridXY.material = new THREE.LineBasicMaterial({ color: gridColor, transparent: true, opacity: 0.15 });
-    const gridYZ = new THREE.GridHelper(100, 25, gridColor, gridColor); gridYZ.rotation.z = Math.PI / 2; gridYZ.material = new THREE.LineBasicMaterial({ color: gridColor, transparent: true, opacity: 0.15 });
-    r.gridGroup.add(gridXZ, gridXY, gridYZ);
+    const gridXY = new THREE.GridHelper(100, 25, gridColor, gridColor); 
+    gridXY.rotation.x = Math.PI / 2; 
+    gridXY.material = new THREE.LineBasicMaterial({ color: gridColor, transparent: true, opacity: 0.15 });
+    r.gridGroup.add(gridXY);
     r.gridGroup.visible = sr.current.isGridVisible;
     r.targetGroup.add(r.gridGroup);
 
-    const randRx = Math.floor(Math.random() * 80 - 20);
-    const randRy = Math.floor(Math.random() * 180 - 90);
-    
     r.scene.add(r.targetGroup);
 
-    sr.current.rx = randRx; setRx(randRx);
-    sr.current.ry = randRy; setRy(randRy);
     sr.current.zoom = 1.0;
     if (sr.current.isAnswerVisible) {
       sr.current.isAnswerVisible = false;
@@ -462,6 +497,7 @@ export default function RatioPlaneMode() {
 
     const captureFrame = (withAnswer: boolean) => {
       if (r.answerGroup) r.answerGroup.visible = withAnswer;
+      if (r.userGroup) r.userGroup.visible = withAnswer;
       r.mainRenderer!.render(r.scene!, r.camera!);
 
       const tCanvas = document.createElement('canvas');
@@ -494,6 +530,7 @@ export default function RatioPlaneMode() {
         alert("GIFの生成に失敗しました。");
       }
       if (r.answerGroup) r.answerGroup.visible = sr.current.isAnswerVisible;
+      if (r.userGroup) r.userGroup.visible = sr.current.isAnswerVisible;
       r.mainRenderer!.render(r.scene!, r.camera!);
       setIsExporting(false);
     });
@@ -528,6 +565,66 @@ export default function RatioPlaneMode() {
         onPointerCancel={handlePointerUp}
       />
 
+      {isAnswerVisible && modeType === 'rectangle' && (
+        <div style={{
+          position: 'absolute',
+          top: '100px',
+          left: '50%',
+          transform: 'translateX(-50%)',
+          zIndex: 30,
+          background: 'rgba(255,255,255,0.95)',
+          padding: '16px 32px',
+          borderRadius: '16px',
+          boxShadow: '0 4px 12px rgba(0,0,0,0.15)',
+          pointerEvents: 'auto',
+          display: 'flex',
+          flexDirection: 'column',
+          alignItems: 'center',
+          gap: '12px'
+        }}>
+          <div style={{ fontSize: '32px', fontWeight: 'bold', color: '#111' }}>
+            正解: {answerRatio.x} : {answerRatio.y}
+          </div>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '8px', borderTop: '1px solid #ccc', paddingTop: '12px', width: '100%', justifyContent: 'center' }}>
+            <span style={{ fontSize: '16px', fontWeight: 'bold', color: '#388e3c' }}>予想(緑):</span>
+            <input 
+              type="number" step="0.1" min="0.1" value={userRatio.x} 
+              onChange={e => setUserRatio(p => ({...p, x: Number(e.target.value)}))} 
+              style={{ width: '60px', padding: '4px', fontSize: '16px', textAlign: 'center', borderRadius: '4px', border: '1px solid #ccc' }} 
+            />
+            <span style={{ fontWeight: 'bold' }}>:</span>
+            <input 
+              type="number" step="0.1" min="0.1" value={userRatio.y} 
+              onChange={e => setUserRatio(p => ({...p, y: Number(e.target.value)}))} 
+              style={{ width: '60px', padding: '4px', fontSize: '16px', textAlign: 'center', borderRadius: '4px', border: '1px solid #ccc' }} 
+            />
+          </div>
+        </div>
+      )}
+      
+      {isAnswerVisible && modeType === 'triangle' && (
+        <div style={{
+          position: 'absolute',
+          top: '100px',
+          left: '50%',
+          transform: 'translateX(-50%)',
+          zIndex: 30,
+          background: 'rgba(255,255,255,0.95)',
+          padding: '16px 32px',
+          borderRadius: '16px',
+          boxShadow: '0 4px 12px rgba(0,0,0,0.15)',
+          pointerEvents: 'auto',
+          display: 'flex',
+          flexDirection: 'column',
+          alignItems: 'center',
+          gap: '12px'
+        }}>
+          <div style={{ fontSize: '32px', fontWeight: 'bold', color: '#111' }}>
+            正解角度: {sr.current.currentAngle}° / {90 - sr.current.currentAngle}° / 90°
+          </div>
+        </div>
+      )}
+
       <div className="glass-panel" style={{ position: 'absolute', top: 20, left: 20, padding: 16, zIndex: 20, width: 220 }}>
         <div style={{ marginBottom: 12 }}>
           <label style={{ fontSize: 12, fontWeight: 'bold', display: 'block', marginBottom: 4 }}>問題タイプ</label>
@@ -548,25 +645,6 @@ export default function RatioPlaneMode() {
             </button>
           </div>
         </div>
-        <div style={{ marginBottom: 12, fontSize: 14, fontWeight: 'bold' }}>
-          <label>パースの強さ: <span>{fov}</span></label>
-          <input type="range" min="30" max="120" value={fov} onChange={e => setFovSync(Number(e.target.value))} style={{ width: '100%', marginTop: 6 }} />
-        </div>
-        <div style={{ marginBottom: 12, fontSize: 14, fontWeight: 'bold' }}>
-          <label>縦アングル: <span>{rx}</span>°</label>
-          <input type="range" min="-80" max="80" value={rx} onChange={e => setRxSync(Number(e.target.value))} style={{ width: '100%', marginTop: 6 }} />
-        </div>
-        <div style={{ fontSize: 14, fontWeight: 'bold' }}>
-          <label>横アングル: <span>{ry}</span>°</label>
-          <input type="range" min="-180" max="180" value={ry} onChange={e => setRySync(Number(e.target.value))} style={{ width: '100%', marginTop: 6 }} />
-        </div>
-      </div>
-
-      <div className="glass-panel" style={{ position: 'absolute', top: 20, right: 20, width: 200, height: 200, overflow: 'hidden', zIndex: 20, padding: 0 }}>
-        <div style={{ position: 'absolute', top: 0, left: 0, width: '100%', background: 'rgba(0,0,0,0.7)', color: 'white', fontSize: 12, textAlign: 'center', padding: '4px 0', zIndex: 21 }}>
-          3Dサムネイル
-        </div>
-        <canvas ref={thumbnailCanvasRef} style={{ width: '100%', height: '100%', display: 'block' }} />
       </div>
 
       <div className="glass-panel" style={{ position: 'absolute', bottom: 30, right: 30, zIndex: 20, display: 'flex', alignItems: 'center', gap: 10, padding: 10, borderRadius: 30 }}>

@@ -2,7 +2,7 @@ import { useEffect, useRef, useState } from 'react';
 import * as THREE from 'three';
 import gifshot from 'gifshot';
 
-const COLORS = ['#607d8b', '#ff3b30', '#34c759', '#007aff', '#111111'];
+const COLORS = ['#607d8b', '#ab47bc', '#81c784', '#64b5f6', '#111111'];
 
 export default function RatioCuboidMode() {
   const mainCanvasRef = useRef<HTMLCanvasElement>(null);
@@ -19,8 +19,16 @@ export default function RatioCuboidMode() {
   const [isExporting, setIsExporting] = useState(false);
   
   const [modeType, setModeType] = useState<'random' | 'two_same'>('random');
+  
+  const [answerRatio, setAnswerRatio] = useState({ x: 1, y: 1, z: 1 });
+  const [userRatio, setUserRatio] = useState({ x: 1, y: 1, z: 1 });
 
-  const sr = useRef({ fov: 50, rx: 25, ry: 45, zoom: 1.0, isGridVisible: false, isAnswerVisible: false, modeType: 'random' });
+  const sr = useRef({ 
+    fov: 50, rx: 25, ry: 45, zoom: 1.0, 
+    isGridVisible: false, isAnswerVisible: false, modeType: 'random',
+    trueX: 1, trueY: 1, trueZ: 1,
+    userX: 1, userY: 1, userZ: 1
+  });
 
   const refs = useRef({
     scene: null as THREE.Scene | null,
@@ -31,6 +39,7 @@ export default function RatioCuboidMode() {
     targetGroup: null as THREE.Group | null,
     gridGroup: null as THREE.Group | null,
     answerGroup: null as THREE.Group | null,
+    userGroup: null as THREE.Group | null,
     isDrawing: false,
     lastX: 0,
     lastY: 0,
@@ -63,12 +72,16 @@ export default function RatioCuboidMode() {
     r.scene.updateMatrixWorld(true);
 
     if (r.answerGroup) r.answerGroup.visible = state.isAnswerVisible;
+    if (r.userGroup) r.userGroup.visible = state.isAnswerVisible;
+
     r.mainRenderer.render(r.scene, r.camera);
 
     if (r.answerGroup) r.answerGroup.visible = true;
+    if (r.userGroup) r.userGroup.visible = true; // Show overlay in thumbnail too
     r.thumbnailRenderer.render(r.scene, r.thumbnailCamera);
 
     if (r.answerGroup) r.answerGroup.visible = state.isAnswerVisible;
+    if (r.userGroup) r.userGroup.visible = state.isAnswerVisible;
   };
 
   const setRxSync = (v: number) => { sr.current.rx = v; setRx(v); renderScene(); };
@@ -84,6 +97,7 @@ export default function RatioCuboidMode() {
   useEffect(() => {
     sr.current.modeType = modeType;
     generateRandomBlock();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [modeType]);
 
   useEffect(() => {
@@ -154,7 +168,86 @@ export default function RatioCuboidMode() {
       thumbnailRenderer.dispose();
       mainRenderer.dispose();
     };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
+
+  const cylGeo = new THREE.CylinderGeometry(1, 1, 1, 8);
+  cylGeo.rotateX(Math.PI / 2);
+  const addThickLine = (group: THREE.Group, p1: THREE.Vector3, p2: THREE.Vector3, mat: THREE.Material, radius: number) => {
+    const dist = p1.distanceTo(p2);
+    if (dist < 0.01) return;
+    const mesh = new THREE.Mesh(cylGeo, mat);
+    mesh.position.copy(p1).lerp(p2, 0.5);
+    mesh.scale.set(radius, radius, dist);
+    mesh.lookAt(p2);
+    group.add(mesh);
+  };
+
+  const updateUserGroup = () => {
+    const r = refs.current;
+    if (!r.targetGroup) return;
+
+    if (r.userGroup) {
+      r.userGroup.traverse((child) => {
+        if ((child as THREE.Mesh).geometry) (child as THREE.Mesh).geometry.dispose();
+        if ((child as THREE.Mesh).material) {
+          const mat = (child as THREE.Mesh).material;
+          if (Array.isArray(mat)) mat.forEach(m => m.dispose());
+          else mat.dispose();
+        }
+      });
+      r.targetGroup.remove(r.userGroup);
+    }
+    r.userGroup = new THREE.Group();
+
+    const trueX = sr.current.trueX;
+    const trueY = sr.current.trueY;
+    const trueZ = sr.current.trueZ;
+    const maxDim = Math.max(trueX, trueY, trueZ);
+    const unitSize = 10 / maxDim;
+
+    const origW = trueX * unitSize;
+    const origH = trueY * unitSize;
+    const origD = trueZ * unitSize;
+
+    const ux = sr.current.userX * unitSize;
+    const uy = sr.current.userY * unitSize;
+    const uz = sr.current.userZ * unitSize;
+
+    const geo = new THREE.BoxGeometry(ux, uy, uz);
+    const faceMat = new THREE.MeshBasicMaterial({ color: 0x81c784, transparent: true, opacity: 0.3, polygonOffset: true, polygonOffsetFactor: -2, polygonOffsetUnits: -2 });
+    const mesh = new THREE.Mesh(geo, faceMat);
+    
+    // Anchor to the -X, -Y, -Z corner instead of center
+    mesh.position.set((ux - origW) / 2, (uy - origH) / 2, (uz - origD) / 2);
+    r.userGroup.add(mesh);
+
+    const edges = new THREE.EdgesGeometry(geo);
+    const edgeMat = new THREE.MeshBasicMaterial({ color: 0x388e3c });
+    const pos = edges.attributes.position.array;
+    for (let i = 0; i < pos.length; i += 6) {
+      const p1 = new THREE.Vector3(pos[i], pos[i+1], pos[i+2]);
+      const p2 = new THREE.Vector3(pos[i+3], pos[i+4], pos[i+5]);
+      // Apply the same corner offset to the lines
+      p1.add(mesh.position);
+      p2.add(mesh.position);
+      addThickLine(r.userGroup, p1, p2, edgeMat, 0.06);
+    }
+
+    r.userGroup.visible = sr.current.isAnswerVisible;
+    r.targetGroup.add(r.userGroup);
+
+    renderScene();
+  };
+
+  // Called when userRatio state changes
+  useEffect(() => {
+    sr.current.userX = userRatio.x;
+    sr.current.userY = userRatio.y;
+    sr.current.userZ = userRatio.z;
+    updateUserGroup();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [userRatio]);
 
   const generateRandomBlock = () => {
     const r = refs.current;
@@ -173,21 +266,24 @@ export default function RatioCuboidMode() {
     }
     r.targetGroup = new THREE.Group();
 
+    const getRandomSizeCuboid = () => {
+      const steps = [1, 1.5, 2, 2.5, 3, 3.5, 4];
+      return steps[Math.floor(Math.random() * steps.length)];
+    };
+
     let x = 1, y = 1, z = 1;
     if (sr.current.modeType === 'random') {
-      const sizes = [1, 2, 3, 4].sort(() => Math.random() - 0.5);
-      x = sizes[0];
-      y = sizes[1];
-      z = sizes[2];
-      // ensure one is 1
+      x = getRandomSizeCuboid();
+      y = getRandomSizeCuboid();
+      z = getRandomSizeCuboid();
       if (x !== 1 && y !== 1 && z !== 1) {
         const idx = Math.floor(Math.random() * 3);
         if (idx === 0) x = 1; else if (idx === 1) y = 1; else z = 1;
       }
     } else {
-      const sizes = [1, 2, 3, 4].sort(() => Math.random() - 0.5);
-      const s1 = sizes[0];
-      const s2 = sizes[1] === s1 ? sizes[2] : sizes[1];
+      const s1 = getRandomSizeCuboid();
+      let s2 = getRandomSizeCuboid();
+      while (s2 === s1) { s2 = getRandomSizeCuboid(); }
       const vals = [s1, s1, s2].sort(() => Math.random() - 0.5);
       x = vals[0];
       y = vals[1];
@@ -205,7 +301,14 @@ export default function RatioCuboidMode() {
       }
     }
 
-    const unitSize = 3;
+    sr.current.trueX = x;
+    sr.current.trueY = y;
+    sr.current.trueZ = z;
+    setAnswerRatio({ x, y, z });
+    setUserRatio({ x, y, z });
+
+    const maxDim = Math.max(x, y, z);
+    const unitSize = 10 / maxDim;
     const w = x * unitSize;
     const h = y * unitSize;
     const d = z * unitSize;
@@ -215,37 +318,20 @@ export default function RatioCuboidMode() {
     const cube = new THREE.Mesh(geo, matA);
     r.targetGroup.add(cube);
 
-    const blackMat = new THREE.MeshBasicMaterial({ color: 0x333333 });
+    const blackMat = new THREE.MeshBasicMaterial({ color: 0x333333 }); // Frame normal
+    const frameOneMat = new THREE.MeshBasicMaterial({ color: 0xab47bc }); // Purple
     const edges = new THREE.EdgesGeometry(geo);
     
-    const lineRadius = 0.04;
-    const cylGeo = new THREE.CylinderGeometry(lineRadius, lineRadius, 1, 8);
-    cylGeo.rotateX(Math.PI / 2);
-    
-    const addThickLine = (group: THREE.Group, p1: THREE.Vector3, p2: THREE.Vector3, mat: THREE.Material, forceDist?: number) => {
-      const dist = p1.distanceTo(p2);
-      if (dist < 0.01) return;
-      const mesh = new THREE.Mesh(cylGeo, mat);
-      mesh.position.copy(p1).lerp(p2, 0.5);
-      mesh.scale.set(1, 1, forceDist || dist);
-      mesh.lookAt(p2);
-      group.add(mesh);
-    };
-
     const pos = edges.attributes.position.array;
     for (let i = 0; i < pos.length; i += 6) {
       const p1 = new THREE.Vector3(pos[i], pos[i+1], pos[i+2]);
       const p2 = new THREE.Vector3(pos[i+3], pos[i+4], pos[i+5]);
       
-      // Determine if this edge length is 1 (unitSize)
       const dist = p1.distanceTo(p2);
       if (Math.abs(dist - unitSize) < 0.1) {
-        const highlightMat = new THREE.MeshBasicMaterial({ color: 0xff3b30 });
-        addThickLine(r.targetGroup, p1, p2, highlightMat, dist);
-        const mesh = r.targetGroup.children[r.targetGroup.children.length - 1] as THREE.Mesh;
-        mesh.scale.set(2.5, 2.5, dist); // thicker red line for 1 unit
+        addThickLine(r.targetGroup, p1, p2, frameOneMat, 0.08); // thicker red line for 1 unit
       } else {
-        addThickLine(r.targetGroup, p1, p2, blackMat);
+        addThickLine(r.targetGroup, p1, p2, blackMat, 0.04);
       }
     }
 
@@ -255,34 +341,40 @@ export default function RatioCuboidMode() {
     const aCube = new THREE.Mesh(geo, answerSolidMat);
     r.answerGroup.add(aCube);
     
-    const redMat = new THREE.MeshBasicMaterial({ color: 0xff3b30 });
+    const gridInnerMat = new THREE.MeshBasicMaterial({ color: 0x64b5f6 }); // Soft blue for inner grid
     
     for (let ix = 0; ix <= x; ix++) {
       const px = -w/2 + ix * unitSize;
-      addThickLine(r.answerGroup, new THREE.Vector3(px, -h/2, d/2), new THREE.Vector3(px, h/2, d/2), redMat);
-      addThickLine(r.answerGroup, new THREE.Vector3(px, -h/2, -d/2), new THREE.Vector3(px, h/2, -d/2), redMat);
-      addThickLine(r.answerGroup, new THREE.Vector3(px, h/2, -d/2), new THREE.Vector3(px, h/2, d/2), redMat);
-      addThickLine(r.answerGroup, new THREE.Vector3(px, -h/2, -d/2), new THREE.Vector3(px, -h/2, d/2), redMat);
+      addThickLine(r.answerGroup, new THREE.Vector3(px, -h/2, d/2), new THREE.Vector3(px, h/2, d/2), gridInnerMat, 0.03);
+      addThickLine(r.answerGroup, new THREE.Vector3(px, -h/2, -d/2), new THREE.Vector3(px, h/2, -d/2), gridInnerMat, 0.03);
+      addThickLine(r.answerGroup, new THREE.Vector3(px, h/2, -d/2), new THREE.Vector3(px, h/2, d/2), gridInnerMat, 0.03);
+      addThickLine(r.answerGroup, new THREE.Vector3(px, -h/2, -d/2), new THREE.Vector3(px, -h/2, d/2), gridInnerMat, 0.03);
     }
     for (let iy = 0; iy <= y; iy++) {
       const py = -h/2 + iy * unitSize;
-      addThickLine(r.answerGroup, new THREE.Vector3(-w/2, py, d/2), new THREE.Vector3(w/2, py, d/2), redMat);
-      addThickLine(r.answerGroup, new THREE.Vector3(-w/2, py, -d/2), new THREE.Vector3(w/2, py, -d/2), redMat);
-      addThickLine(r.answerGroup, new THREE.Vector3(w/2, py, -d/2), new THREE.Vector3(w/2, py, d/2), redMat);
-      addThickLine(r.answerGroup, new THREE.Vector3(-w/2, py, -d/2), new THREE.Vector3(-w/2, py, d/2), redMat);
+      addThickLine(r.answerGroup, new THREE.Vector3(-w/2, py, d/2), new THREE.Vector3(w/2, py, d/2), gridInnerMat, 0.03);
+      addThickLine(r.answerGroup, new THREE.Vector3(-w/2, py, -d/2), new THREE.Vector3(w/2, py, -d/2), gridInnerMat, 0.03);
+      addThickLine(r.answerGroup, new THREE.Vector3(w/2, py, -d/2), new THREE.Vector3(w/2, py, d/2), gridInnerMat, 0.03);
+      addThickLine(r.answerGroup, new THREE.Vector3(-w/2, py, -d/2), new THREE.Vector3(-w/2, py, d/2), gridInnerMat, 0.03);
     }
     for (let iz = 0; iz <= z; iz++) {
       const pz = -d/2 + iz * unitSize;
-      addThickLine(r.answerGroup, new THREE.Vector3(-w/2, -h/2, pz), new THREE.Vector3(w/2, -h/2, pz), redMat);
-      addThickLine(r.answerGroup, new THREE.Vector3(-w/2, h/2, pz), new THREE.Vector3(w/2, h/2, pz), redMat);
-      addThickLine(r.answerGroup, new THREE.Vector3(w/2, -h/2, pz), new THREE.Vector3(w/2, h/2, pz), redMat);
-      addThickLine(r.answerGroup, new THREE.Vector3(-w/2, -h/2, pz), new THREE.Vector3(-w/2, h/2, pz), redMat);
+      addThickLine(r.answerGroup, new THREE.Vector3(-w/2, -h/2, pz), new THREE.Vector3(w/2, -h/2, pz), gridInnerMat, 0.03);
+      addThickLine(r.answerGroup, new THREE.Vector3(-w/2, h/2, pz), new THREE.Vector3(w/2, h/2, pz), gridInnerMat, 0.03);
+      addThickLine(r.answerGroup, new THREE.Vector3(w/2, -h/2, pz), new THREE.Vector3(w/2, h/2, pz), gridInnerMat, 0.03);
+      addThickLine(r.answerGroup, new THREE.Vector3(-w/2, -h/2, pz), new THREE.Vector3(-w/2, h/2, pz), gridInnerMat, 0.03);
     }
 
     r.answerGroup.visible = sr.current.isAnswerVisible;
     r.targetGroup.add(r.answerGroup);
 
-    // Grid
+    // Initial User Group update
+    sr.current.userX = x;
+    sr.current.userY = y;
+    sr.current.userZ = z;
+    updateUserGroup();
+
+    // Grid (XZ, XY, YZ)
     if (r.gridGroup) {
       r.gridGroup.traverse((child) => {
         if ((child as THREE.LineSegments).geometry) (child as THREE.LineSegments).geometry.dispose();
@@ -432,6 +524,7 @@ export default function RatioCuboidMode() {
 
     const captureFrame = (withAnswer: boolean) => {
       if (r.answerGroup) r.answerGroup.visible = withAnswer;
+      if (r.userGroup) r.userGroup.visible = withAnswer;
       r.mainRenderer!.render(r.scene!, r.camera!);
 
       const tCanvas = document.createElement('canvas');
@@ -464,6 +557,7 @@ export default function RatioCuboidMode() {
         alert("GIFの生成に失敗しました。");
       }
       if (r.answerGroup) r.answerGroup.visible = sr.current.isAnswerVisible;
+      if (r.userGroup) r.userGroup.visible = sr.current.isAnswerVisible;
       r.mainRenderer!.render(r.scene!, r.camera!);
       setIsExporting(false);
     });
@@ -497,6 +591,49 @@ export default function RatioCuboidMode() {
         onPointerUp={handlePointerUp}
         onPointerCancel={handlePointerUp}
       />
+
+      {isAnswerVisible && (
+        <div style={{
+          position: 'absolute',
+          top: '100px',
+          left: '50%',
+          transform: 'translateX(-50%)',
+          zIndex: 30,
+          background: 'rgba(255,255,255,0.95)',
+          padding: '16px 32px',
+          borderRadius: '16px',
+          boxShadow: '0 4px 12px rgba(0,0,0,0.15)',
+          pointerEvents: 'auto',
+          display: 'flex',
+          flexDirection: 'column',
+          alignItems: 'center',
+          gap: '12px'
+        }}>
+          <div style={{ fontSize: '32px', fontWeight: 'bold', color: '#111' }}>
+            正解: {answerRatio.x} : {answerRatio.y} : {answerRatio.z}
+          </div>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '8px', borderTop: '1px solid #ccc', paddingTop: '12px', width: '100%', justifyContent: 'center' }}>
+            <span style={{ fontSize: '16px', fontWeight: 'bold', color: '#388e3c' }}>予想(緑):</span>
+            <input 
+              type="number" step="0.5" min="0.5" value={userRatio.x} 
+              onChange={e => setUserRatio(p => ({...p, x: Number(e.target.value)}))} 
+              style={{ width: '60px', padding: '4px', fontSize: '16px', textAlign: 'center', borderRadius: '4px', border: '1px solid #ccc' }} 
+            />
+            <span style={{ fontWeight: 'bold' }}>:</span>
+            <input 
+              type="number" step="0.5" min="0.5" value={userRatio.y} 
+              onChange={e => setUserRatio(p => ({...p, y: Number(e.target.value)}))} 
+              style={{ width: '60px', padding: '4px', fontSize: '16px', textAlign: 'center', borderRadius: '4px', border: '1px solid #ccc' }} 
+            />
+            <span style={{ fontWeight: 'bold' }}>:</span>
+            <input 
+              type="number" step="0.5" min="0.5" value={userRatio.z} 
+              onChange={e => setUserRatio(p => ({...p, z: Number(e.target.value)}))} 
+              style={{ width: '60px', padding: '4px', fontSize: '16px', textAlign: 'center', borderRadius: '4px', border: '1px solid #ccc' }} 
+            />
+          </div>
+        </div>
+      )}
 
       <div className="glass-panel" style={{ position: 'absolute', top: 20, left: 20, padding: 16, zIndex: 20, width: 220 }}>
         <div style={{ marginBottom: 12 }}>
