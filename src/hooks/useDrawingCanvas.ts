@@ -34,6 +34,9 @@ export interface UseDrawingCanvasReturn {
     onPointerDown: (e: React.PointerEvent) => void;
     onPointerMove: (e: React.PointerEvent) => void;
     onPointerUp: () => void;
+    onTouchStart: (e: React.TouchEvent) => void;
+    onTouchEnd: (e: React.TouchEvent) => void;
+    onTouchCancel: (e: React.TouchEvent) => void;
   };
   /** Redraws all strokes on the canvas */
   redrawAll: (ctx: CanvasRenderingContext2D, strokes: Stroke[]) => void;
@@ -68,6 +71,7 @@ const useDrawingCanvas = ({
   const currentStrokeRef = useRef<Point[]>([]);
   // Tracks the actual tool used for the current stroke (to override UI state if using touch)
   const activeToolRef = useRef<'pen' | 'eraser'>('pen');
+  const undoTriggeredRef = useRef(false);
 
   const redrawAll = useCallback((ctx: CanvasRenderingContext2D, strokes: Stroke[]) => {
     const canvas = ctx.canvas;
@@ -185,13 +189,38 @@ const useDrawingCanvas = ({
     }
   }, [undoStack, eraserWidth, penWidth]);
 
+  const onTouchStart = useCallback((e: React.TouchEvent) => {
+    if (e.touches.length === 3) {
+      if (!undoTriggeredRef.current) {
+        undoTriggeredRef.current = true;
+        const ctx = undoStack.ctxRef.current;
+        if (ctx) {
+          undoStack.performUndo((strokes) => redrawAll(ctx, strokes));
+        }
+      }
+    }
+  }, [undoStack, redrawAll]);
+
+  const onTouchEnd = useCallback((e: React.TouchEvent) => {
+    if (e.touches.length < 3) {
+      undoTriggeredRef.current = false;
+    }
+  }, []);
+
   return {
     currentTool,
     setCurrentTool,
     currentColor,
     setCurrentColor,
     palette,
-    handlers: { onPointerDown, onPointerMove, onPointerUp },
+    handlers: { 
+      onPointerDown, 
+      onPointerMove, 
+      onPointerUp,
+      onTouchStart,
+      onTouchEnd,
+      onTouchCancel: onTouchEnd,
+    },
     redrawAll,
   };
 };
