@@ -9,6 +9,8 @@ export interface UseOrbitControlsOptions {
   cameraHandle: PerspectiveCameraHandle;
   /** Sensitivity for rotation (degrees per pixel). @default 0.5 */
   sensitivity?: number;
+  /** Whether the orbit controls are active. @default false */
+  enabled?: boolean;
 }
 
 /**
@@ -19,6 +21,7 @@ export function useOrbitControls({
   canvasRef,
   cameraHandle,
   sensitivity = 0.5,
+  enabled = false,
 }: UseOrbitControlsOptions): void {
   // Store mutable state that shouldn't trigger re-renders
   const stateRef = useRef({
@@ -36,6 +39,8 @@ export function useOrbitControls({
   sensitivityRef.current = sensitivity;
 
   useEffect(() => {
+    if (!enabled) return;
+    
     const canvas = canvasRef.current;
     if (!canvas) return;
 
