@@ -4,7 +4,7 @@ import type { PerspectiveCameraHandle } from './usePerspectiveCamera';
 
 export interface UseOrbitControlsOptions {
   /** Reference to the canvas element to attach listeners to */
-  canvasRef: RefObject<HTMLCanvasElement>;
+  canvasRef: RefObject<HTMLCanvasElement | null>;
   /** Camera handle from usePerspectiveCamera hook */
   cameraHandle: PerspectiveCameraHandle;
   /** Sensitivity for rotation (degrees per pixel). @default 0.5 */

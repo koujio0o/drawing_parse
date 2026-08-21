@@ -91,7 +91,6 @@ export default function ProliferationMode() {
 
   useCanvasResize({
     drawCanvasRef,
-    ctxRef: undoStack.ctxRef,
     onResize: (w, h) => {
       const r = refs.current;
       if (r.mainRenderer) r.mainRenderer.setSize(w, h);

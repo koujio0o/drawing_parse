@@ -1,4 +1,4 @@
-import { useState, useRef, useCallback, type RefObject } from 'react';
+import { useState, useRef, useCallback } from 'react';
 import type { UndoStackHandle } from './useUndoStack';
 import type { Point, Stroke } from '../types/drawing';
 

@@ -4,6 +4,7 @@ import useUndoStack from '../hooks/useUndoStack';
 import useDrawingCanvas from '../hooks/useDrawingCanvas';
 import useZoomControls from '../hooks/useZoomControls';
 import usePerspectiveCamera from '../hooks/usePerspectiveCamera';
+import useOrbitControls from '../hooks/useOrbitControls';
 import useGifExport from '../hooks/useGifExport';
 import useCanvasResize from '../hooks/useCanvasResize';
 import DrawingToolbar from './DrawingToolbar';
@@ -37,7 +38,6 @@ export default function SphereMode() {
   const undoStack = useUndoStack({ canvasRef: drawCanvasRef });
 
   const drawing = useDrawingCanvas({
-    canvasRef: drawCanvasRef,
     undoStack,
   });
 
@@ -69,6 +69,13 @@ export default function SphereMode() {
     onRender: renderScene,
   });
 
+  useOrbitControls({ canvasRef: drawCanvasRef, cameraHandle: cam });
+
+  const doRedraw = () => {
+    const ctx = undoStack.ctxRef.current;
+    if (ctx) drawing.redrawAll(ctx, undoStack.getCurrentStrokes());
+  };
+
   useZoomControls({
     canvasRef: drawCanvasRef,
     onZoomChange: (z) => cam.setZoomSync(z),
@@ -79,7 +86,7 @@ export default function SphereMode() {
 
   useCanvasResize({
     drawCanvasRef,
-    ctxRef: undoStack.ctxRef,
+    redrawAll: doRedraw,
     extraCanvasRefs: [guideCanvasRef, answerCanvasRef],
     onResize: (w, h) => {
       const r = refs.current;
@@ -444,7 +451,7 @@ export default function SphereMode() {
         isAnswerVisible={isAnswerVisible}
         onAnswerToggle={() => setAnswerSync(!isAnswerVisible)}
         onNextQuestion={generateRandomBlock}
-        onClearAll={undoStack.clearAll}
+        onClearAll={() => undoStack.clearAll(doRedraw)}
       />
 
       <div className="glass-panel" style={{ position: 'absolute', top: 20, right: 20, width: 200, height: 200, overflow: 'hidden', zIndex: 20, padding: 0 }}>
@@ -456,8 +463,7 @@ export default function SphereMode() {
 
       <DrawingToolbar
         drawing={drawing}
-        onUndo={undoStack.performUndo}
-        onClearAll={undoStack.clearAll}
+        onUndo={() => undoStack.performUndo(doRedraw)}
         onExportGif={handleExportGif}
         isExporting={gif.isExporting}
       />

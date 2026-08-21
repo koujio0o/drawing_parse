@@ -6,6 +6,7 @@ import useZoomControls from '../hooks/useZoomControls';
 import usePerspectiveCamera from '../hooks/usePerspectiveCamera';
 import useGifExport from '../hooks/useGifExport';
 import useCanvasResize from '../hooks/useCanvasResize';
+import useOrbitControls from '../hooks/useOrbitControls';
 import DrawingToolbar from './DrawingToolbar';
 import PerspectiveControls from './PerspectiveControls';
 
@@ -36,9 +37,13 @@ export default function DiagonalCubeMode() {
   const undoStack = useUndoStack({ canvasRef: drawCanvasRef });
 
   const drawing = useDrawingCanvas({
-    canvasRef: drawCanvasRef,
     undoStack,
   });
+
+  const doRedraw = () => {
+    const ctx = undoStack.ctxRef.current;
+    if (ctx) drawing.redrawAll(ctx, undoStack.getCurrentStrokes());
+  };
 
   const renderScene = () => {
     const r = refs.current;
@@ -81,7 +86,7 @@ export default function DiagonalCubeMode() {
 
   useCanvasResize({
     drawCanvasRef,
-    ctxRef: undoStack.ctxRef,
+    redrawAll: doRedraw,
     onResize: (w, h) => {
       const r = refs.current;
       if (r.mainRenderer) r.mainRenderer.setSize(w, h);
@@ -95,6 +100,8 @@ export default function DiagonalCubeMode() {
       }
     },
   });
+
+  useOrbitControls({ canvasRef: drawCanvasRef, cameraHandle: cam });
 
   // --- Visibility sync helpers ---
   const setGridSync = (v: boolean) => { visRef.current.isGridVisible = v; setIsGridVisible(v); renderScene(); };
@@ -428,7 +435,7 @@ export default function DiagonalCubeMode() {
         isAnswerVisible={isAnswerVisible}
         onAnswerToggle={() => setAnswerSync(!isAnswerVisible)}
         onNextQuestion={generateRandomBlock}
-        onClearAll={undoStack.clearAll}
+        onClearAll={() => undoStack.clearAll(doRedraw)}
       />
 
       <div className="glass-panel" style={{ position: 'absolute', top: 20, right: 20, width: 200, height: 200, overflow: 'hidden', zIndex: 20, padding: 0 }}>
@@ -440,8 +447,7 @@ export default function DiagonalCubeMode() {
 
       <DrawingToolbar
         drawing={drawing}
-        onUndo={undoStack.performUndo}
-        onClearAll={undoStack.clearAll}
+        onUndo={() => undoStack.performUndo(doRedraw)}
         onExportGif={handleExportGif}
         isExporting={gif.isExporting}
       />

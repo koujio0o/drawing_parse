@@ -38,7 +38,6 @@ export default function RatioPlaneMode() {
   const undoStack = useUndoStack({ canvasRef: drawCanvasRef });
 
   const drawing = useDrawingCanvas({
-    canvasRef: drawCanvasRef,
     undoStack,
     palette: ['#607d8b', '#ab47bc', '#81c784', '#64b5f6', '#111111']
   });
@@ -82,9 +81,14 @@ export default function RatioPlaneMode() {
 
   const gif = useGifExport({ filename: 'ratio_plane' });
 
+  const doRedraw = () => {
+    const ctx = undoStack.ctxRef.current;
+    if (ctx) drawing.redrawAll(ctx, undoStack.getCurrentStrokes());
+  };
+
   useCanvasResize({
     drawCanvasRef,
-    ctxRef: undoStack.ctxRef,
+    redrawAll: doRedraw,
     onResize: (w, h) => {
       const r = refs.current;
       if (r.mainRenderer) r.mainRenderer.setSize(w, h);
@@ -509,8 +513,7 @@ export default function RatioPlaneMode() {
 
       <DrawingToolbar
         drawing={drawing}
-        onUndo={undoStack.performUndo}
-        onClearAll={undoStack.clearAll}
+        onUndo={() => undoStack.performUndo(doRedraw)}
         onExportGif={handleExportGif}
         isExporting={gif.isExporting}
       />

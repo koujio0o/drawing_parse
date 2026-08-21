@@ -6,6 +6,7 @@ import useZoomControls from '../hooks/useZoomControls';
 import usePerspectiveCamera from '../hooks/usePerspectiveCamera';
 import useGifExport from '../hooks/useGifExport';
 import useCanvasResize from '../hooks/useCanvasResize';
+import useOrbitControls from '../hooks/useOrbitControls';
 import DrawingToolbar from './DrawingToolbar';
 import PerspectiveControls from './PerspectiveControls';
 
@@ -47,10 +48,14 @@ export default function RatioCuboidMode() {
   const undoStack = useUndoStack({ canvasRef: drawCanvasRef });
 
   const drawing = useDrawingCanvas({
-    canvasRef: drawCanvasRef,
     undoStack,
     palette: COLORS,
   });
+
+  const doRedraw = () => {
+    const ctx = undoStack.ctxRef.current;
+    if (ctx) drawing.redrawAll(ctx, undoStack.getCurrentStrokes());
+  };
 
   const renderScene = () => {
     const r = refs.current;
@@ -95,7 +100,7 @@ export default function RatioCuboidMode() {
 
   useCanvasResize({
     drawCanvasRef,
-    ctxRef: undoStack.ctxRef,
+    redrawAll: doRedraw,
     onResize: (w, h) => {
       const r = refs.current;
       if (r.mainRenderer) r.mainRenderer.setSize(w, h);
@@ -109,6 +114,8 @@ export default function RatioCuboidMode() {
       }
     },
   });
+
+  useOrbitControls({ canvasRef: drawCanvasRef, cameraHandle: cam });
 
   const setGridSync = (v: boolean) => { visRef.current.isGridVisible = v; setIsGridVisible(v); renderScene(); };
   const setAnswerSync = (v: boolean) => { visRef.current.isAnswerVisible = v; setIsAnswerVisible(v); renderScene(); };
@@ -452,7 +459,7 @@ export default function RatioCuboidMode() {
         isAnswerVisible={isAnswerVisible}
         onAnswerToggle={() => setAnswerSync(!isAnswerVisible)}
         onNextQuestion={generateRandomBlock}
-        onClearAll={undoStack.clearAll}
+        onClearAll={() => undoStack.clearAll(doRedraw)}
       >
         <div style={{ marginBottom: 12 }}>
           <label style={{ fontSize: 12, fontWeight: 'bold', display: 'block', marginBottom: 4 }}>問題タイプ</label>
@@ -527,8 +534,7 @@ export default function RatioCuboidMode() {
 
       <DrawingToolbar
         drawing={drawing}
-        onUndo={undoStack.performUndo}
-        onClearAll={undoStack.clearAll}
+        onUndo={() => undoStack.performUndo(doRedraw)}
         onExportGif={handleExportGif}
         isExporting={gif.isExporting}
       />
