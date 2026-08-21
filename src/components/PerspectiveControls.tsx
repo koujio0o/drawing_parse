@@ -28,6 +28,7 @@ export interface PerspectiveControlsProps {
   onNextQuestion?: () => void;
   /** Callback to clear all drawn content */
   onClearAll?: () => void;
+  children?: React.ReactNode;
 }
 
 /**
@@ -51,6 +52,7 @@ const PerspectiveControls: React.FC<PerspectiveControlsProps> = ({
   onAnswerToggle,
   onNextQuestion,
   onClearAll,
+  children,
 }) => {
   const hasActionButtons = onClearAll || onNextQuestion || onGridToggle || onAnswerToggle;
 
@@ -58,6 +60,7 @@ const PerspectiveControls: React.FC<PerspectiveControlsProps> = ({
     <>
       {/* Top-left: perspective sliders */}
       <div className="glass-panel" style={{ position: 'absolute', top: 20, left: 20, padding: 16, zIndex: 20, width: 220 }}>
+        {children}
         <div style={{ marginBottom: 12, fontSize: 14, fontWeight: 'bold' }}>
           <label>パースの強さ: <span>{fov}</span></label>
           <input type="range" min={fovRange[0]} max={fovRange[1]} value={fov} onChange={e => onFovChange(Number(e.target.value))} style={{ width: '100%', marginTop: 6 }} />

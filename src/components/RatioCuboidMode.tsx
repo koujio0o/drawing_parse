@@ -1,6 +1,13 @@
 import { useEffect, useRef, useState } from 'react';
 import * as THREE from 'three';
-import gifshot from 'gifshot';
+import useUndoStack from '../hooks/useUndoStack';
+import useDrawingCanvas from '../hooks/useDrawingCanvas';
+import useZoomControls from '../hooks/useZoomControls';
+import usePerspectiveCamera from '../hooks/usePerspectiveCamera';
+import useGifExport from '../hooks/useGifExport';
+import useCanvasResize from '../hooks/useCanvasResize';
+import DrawingToolbar from './DrawingToolbar';
+import PerspectiveControls from './PerspectiveControls';
 
 const COLORS = ['#607d8b', '#ab47bc', '#81c784', '#64b5f6', '#111111'];
 
@@ -9,23 +16,15 @@ export default function RatioCuboidMode() {
   const drawCanvasRef = useRef<HTMLCanvasElement>(null);
   const thumbnailCanvasRef = useRef<HTMLCanvasElement>(null);
 
-  const [fov, setFov] = useState(50);
-  const [rx, setRx] = useState(25);
-  const [ry, setRy] = useState(45);
-  const [currentTool, setCurrentTool] = useState<'pen' | 'eraser'>('pen');
-  const [currentColor, setCurrentColor] = useState<string>(COLORS[0]);
   const [isGridVisible, setIsGridVisible] = useState(false);
   const [isAnswerVisible, setIsAnswerVisible] = useState(false);
-  const [isExporting, setIsExporting] = useState(false);
-  
   const [modeType, setModeType] = useState<'random' | 'two_same'>('random');
   
   const [answerRatio, setAnswerRatio] = useState({ x: 1, y: 1, z: 1 });
   const [userRatio, setUserRatio] = useState({ x: 1, y: 1, z: 1 });
 
   const sr = useRef({ 
-    fov: 50, rx: 25, ry: 45, zoom: 1.0, 
-    isGridVisible: false, isAnswerVisible: false, modeType: 'random',
+    modeType: 'random',
     trueX: 1, trueY: 1, trueZ: 1,
     userX: 1, userY: 1, userZ: 1
   });
@@ -40,59 +39,79 @@ export default function RatioCuboidMode() {
     gridGroup: null as THREE.Group | null,
     answerGroup: null as THREE.Group | null,
     userGroup: null as THREE.Group | null,
-    isDrawing: false,
-    lastX: 0,
-    lastY: 0,
-    initialPinchDist: null as number | null,
-    initialZoom: 1.0,
-    undoStack: [] as ImageData[],
-    ctxDraw: null as CanvasRenderingContext2D | null,
+  });
+
+  const visRef = useRef({ isGridVisible: false, isAnswerVisible: false });
+
+  // --- Shared Hooks ---
+  const undoStack = useUndoStack({ canvasRef: drawCanvasRef });
+
+  const drawing = useDrawingCanvas({
+    canvasRef: drawCanvasRef,
+    undoStack,
+    palette: COLORS,
   });
 
   const renderScene = () => {
     const r = refs.current;
     if (!r.scene || !r.camera || !r.mainRenderer || !r.thumbnailRenderer || !r.thumbnailCamera || !r.targetGroup) return;
-    
-    const state = sr.current;
 
-    r.camera.fov = state.fov;
-    r.thumbnailCamera.fov = state.fov;
-    const baseZ = 35;
-    const zPos = (baseZ / Math.tan((state.fov * Math.PI / 180) / 2)) / state.zoom;
-    r.camera.position.z = zPos;
-    r.thumbnailCamera.position.z = zPos;
-    r.camera.updateProjectionMatrix();
-    r.thumbnailCamera.updateProjectionMatrix();
+    cam.applyToCamera(r.camera, r.thumbnailCamera);
+    cam.applyRotation(r.targetGroup);
 
-    r.targetGroup.rotation.set(state.rx * Math.PI / 180, state.ry * Math.PI / 180, 0);
-    r.targetGroup.updateMatrixWorld(true);
-
-    if (r.gridGroup) r.gridGroup.visible = state.isGridVisible;
+    if (r.gridGroup) r.gridGroup.visible = visRef.current.isGridVisible;
 
     r.scene.updateMatrixWorld(true);
 
-    if (r.answerGroup) r.answerGroup.visible = state.isAnswerVisible;
-    if (r.userGroup) r.userGroup.visible = state.isAnswerVisible;
+    if (r.answerGroup) r.answerGroup.visible = visRef.current.isAnswerVisible;
+    if (r.userGroup) r.userGroup.visible = visRef.current.isAnswerVisible;
 
     r.mainRenderer.render(r.scene, r.camera);
 
+    // Thumbnail always shows overlay
     if (r.answerGroup) r.answerGroup.visible = true;
-    if (r.userGroup) r.userGroup.visible = true; // Show overlay in thumbnail too
+    if (r.userGroup) r.userGroup.visible = true;
     r.thumbnailRenderer.render(r.scene, r.thumbnailCamera);
 
-    if (r.answerGroup) r.answerGroup.visible = state.isAnswerVisible;
-    if (r.userGroup) r.userGroup.visible = state.isAnswerVisible;
+    // Restore
+    if (r.answerGroup) r.answerGroup.visible = visRef.current.isAnswerVisible;
+    if (r.userGroup) r.userGroup.visible = visRef.current.isAnswerVisible;
   };
 
-  const setRxSync = (v: number) => { sr.current.rx = v; setRx(v); renderScene(); };
-  const setRySync = (v: number) => { sr.current.ry = v; setRy(v); renderScene(); };
-  const setZoomSync = (v: number | ((z: number) => number)) => {
-    const newZ = typeof v === 'function' ? v(sr.current.zoom) : v;
-    sr.current.zoom = newZ; renderScene();
-  };
-  const setFovSync = (v: number) => { sr.current.fov = v; setFov(v); renderScene(); };
-  const setGridSync = (v: boolean) => { sr.current.isGridVisible = v; setIsGridVisible(v); renderScene(); };
-  const setAnswerSync = (v: boolean) => { sr.current.isAnswerVisible = v; setIsAnswerVisible(v); renderScene(); };
+  const cam = usePerspectiveCamera({
+    baseZ: 35,
+    initialFov: 50,
+    fovRange: [30, 120],
+    onRender: renderScene,
+  });
+
+  useZoomControls({
+    canvasRef: drawCanvasRef,
+    onZoomChange: (z) => cam.setZoomSync(z),
+    getZoom: () => cam.sr.current.zoom,
+  });
+
+  const gif = useGifExport({ filename: 'ratio_cuboid' });
+
+  useCanvasResize({
+    drawCanvasRef,
+    ctxRef: undoStack.ctxRef,
+    onResize: (w, h) => {
+      const r = refs.current;
+      if (r.mainRenderer) r.mainRenderer.setSize(w, h);
+      if (r.thumbnailRenderer && thumbnailCanvasRef.current) {
+        r.thumbnailRenderer.setSize(thumbnailCanvasRef.current.clientWidth, thumbnailCanvasRef.current.clientHeight, false);
+      }
+      if (r.camera) {
+        r.camera.aspect = w / h;
+        r.camera.updateProjectionMatrix();
+        renderScene();
+      }
+    },
+  });
+
+  const setGridSync = (v: boolean) => { visRef.current.isGridVisible = v; setIsGridVisible(v); renderScene(); };
+  const setAnswerSync = (v: boolean) => { visRef.current.isAnswerVisible = v; setIsAnswerVisible(v); renderScene(); };
 
   useEffect(() => {
     sr.current.modeType = modeType;
@@ -103,9 +122,6 @@ export default function RatioCuboidMode() {
   useEffect(() => {
     const onContextMenu = (e: Event) => e.preventDefault();
     window.addEventListener('contextmenu', onContextMenu, { passive: false });
-
-    const cDraw = drawCanvasRef.current!;
-    refs.current.ctxDraw = cDraw.getContext('2d');
 
     const scene = new THREE.Scene();
     scene.background = new THREE.Color(0xf5f5f7);
@@ -132,39 +148,10 @@ export default function RatioCuboidMode() {
     refs.current.mainRenderer = mainRenderer;
     refs.current.thumbnailRenderer = thumbnailRenderer;
 
-    const onResize = () => {
-      const w = window.innerWidth;
-      const h = window.innerHeight;
-      const r = refs.current;
-      const tempImageData = r.undoStack.length > 0 && r.ctxDraw ? r.ctxDraw.getImageData(0, 0, cDraw.width, cDraw.height) : null;
-      
-      cDraw.width = w; cDraw.height = h;
-      mainRenderer.setSize(w, h);
-      
-      if (thumbnailCanvasRef.current) {
-        thumbnailRenderer.setSize(thumbnailCanvasRef.current.clientWidth, thumbnailCanvasRef.current.clientHeight, false);
-      }
-      
-      if (r.ctxDraw) {
-        r.ctxDraw.lineCap = 'round';
-        r.ctxDraw.lineJoin = 'round';
-        if (tempImageData) r.ctxDraw.putImageData(tempImageData, 0, 0);
-      }
-      
-      if (r.camera) {
-        r.camera.aspect = w / h;
-        r.camera.updateProjectionMatrix();
-        renderScene();
-      }
-    };
-    window.addEventListener('resize', onResize);
-    onResize();
-
     generateRandomBlock();
 
     return () => {
       window.removeEventListener('contextmenu', onContextMenu);
-      window.removeEventListener('resize', onResize);
       thumbnailRenderer.dispose();
       mainRenderer.dispose();
     };
@@ -218,7 +205,6 @@ export default function RatioCuboidMode() {
     const faceMat = new THREE.MeshBasicMaterial({ color: 0x81c784, transparent: true, opacity: 0.3, polygonOffset: true, polygonOffsetFactor: -2, polygonOffsetUnits: -2 });
     const mesh = new THREE.Mesh(geo, faceMat);
     
-    // Anchor to the -X, -Y, -Z corner instead of center
     mesh.position.set((ux - origW) / 2, (uy - origH) / 2, (uz - origD) / 2);
     r.userGroup.add(mesh);
 
@@ -228,19 +214,17 @@ export default function RatioCuboidMode() {
     for (let i = 0; i < pos.length; i += 6) {
       const p1 = new THREE.Vector3(pos[i], pos[i+1], pos[i+2]);
       const p2 = new THREE.Vector3(pos[i+3], pos[i+4], pos[i+5]);
-      // Apply the same corner offset to the lines
       p1.add(mesh.position);
       p2.add(mesh.position);
       addThickLine(r.userGroup, p1, p2, edgeMat, 0.06);
     }
 
-    r.userGroup.visible = sr.current.isAnswerVisible;
+    r.userGroup.visible = visRef.current.isAnswerVisible;
     r.targetGroup.add(r.userGroup);
 
     renderScene();
   };
 
-  // Called when userRatio state changes
   useEffect(() => {
     sr.current.userX = userRatio.x;
     sr.current.userY = userRatio.y;
@@ -318,8 +302,8 @@ export default function RatioCuboidMode() {
     const cube = new THREE.Mesh(geo, matA);
     r.targetGroup.add(cube);
 
-    const blackMat = new THREE.MeshBasicMaterial({ color: 0x333333 }); // Frame normal
-    const frameOneMat = new THREE.MeshBasicMaterial({ color: 0xab47bc }); // Purple
+    const blackMat = new THREE.MeshBasicMaterial({ color: 0x333333 });
+    const frameOneMat = new THREE.MeshBasicMaterial({ color: 0xab47bc });
     const edges = new THREE.EdgesGeometry(geo);
     
     const pos = edges.attributes.position.array;
@@ -329,7 +313,7 @@ export default function RatioCuboidMode() {
       
       const dist = p1.distanceTo(p2);
       if (Math.abs(dist - unitSize) < 0.1) {
-        addThickLine(r.targetGroup, p1, p2, frameOneMat, 0.08); // thicker red line for 1 unit
+        addThickLine(r.targetGroup, p1, p2, frameOneMat, 0.08);
       } else {
         addThickLine(r.targetGroup, p1, p2, blackMat, 0.04);
       }
@@ -341,7 +325,7 @@ export default function RatioCuboidMode() {
     const aCube = new THREE.Mesh(geo, answerSolidMat);
     r.answerGroup.add(aCube);
     
-    const gridInnerMat = new THREE.MeshBasicMaterial({ color: 0x64b5f6 }); // Soft blue for inner grid
+    const gridInnerMat = new THREE.MeshBasicMaterial({ color: 0x64b5f6 });
     
     for (let ix = 0; ix <= x; ix++) {
       const px = -w/2 + ix * unitSize;
@@ -365,16 +349,14 @@ export default function RatioCuboidMode() {
       addThickLine(r.answerGroup, new THREE.Vector3(-w/2, -h/2, pz), new THREE.Vector3(-w/2, h/2, pz), gridInnerMat, 0.03);
     }
 
-    r.answerGroup.visible = sr.current.isAnswerVisible;
+    r.answerGroup.visible = visRef.current.isAnswerVisible;
     r.targetGroup.add(r.answerGroup);
 
-    // Initial User Group update
     sr.current.userX = x;
     sr.current.userY = y;
     sr.current.userZ = z;
     updateUserGroup();
 
-    // Grid (XZ, XY, YZ)
     if (r.gridGroup) {
       r.gridGroup.traverse((child) => {
         if ((child as THREE.LineSegments).geometry) (child as THREE.LineSegments).geometry.dispose();
@@ -388,7 +370,7 @@ export default function RatioCuboidMode() {
     const gridXY = new THREE.GridHelper(100, 25, gridColor, gridColor); gridXY.rotation.x = Math.PI / 2; gridXY.material = new THREE.LineBasicMaterial({ color: gridColor, transparent: true, opacity: 0.15 });
     const gridYZ = new THREE.GridHelper(100, 25, gridColor, gridColor); gridYZ.rotation.z = Math.PI / 2; gridYZ.material = new THREE.LineBasicMaterial({ color: gridColor, transparent: true, opacity: 0.15 });
     r.gridGroup.add(gridXZ, gridXY, gridYZ);
-    r.gridGroup.visible = sr.current.isGridVisible;
+    r.gridGroup.visible = visRef.current.isGridVisible;
     r.targetGroup.add(r.gridGroup);
 
     const randRx = Math.floor(Math.random() * 80 - 20);
@@ -396,136 +378,31 @@ export default function RatioCuboidMode() {
     
     r.scene.add(r.targetGroup);
 
-    sr.current.rx = randRx; setRx(randRx);
-    sr.current.ry = randRy; setRy(randRy);
-    sr.current.zoom = 1.0;
-    if (sr.current.isAnswerVisible) {
-      sr.current.isAnswerVisible = false;
+    cam.setRxSync(randRx);
+    cam.setRySync(randRy);
+    cam.setZoomSync(1.0);
+    if (visRef.current.isAnswerVisible) {
+      visRef.current.isAnswerVisible = false;
       setIsAnswerVisible(false);
     }
 
-    if (r.ctxDraw && drawCanvasRef.current) {
-      r.ctxDraw.clearRect(0, 0, drawCanvasRef.current.width, drawCanvasRef.current.height);
+    const ctx = undoStack.ctxRef.current;
+    if (ctx && drawCanvasRef.current) {
+      ctx.clearRect(0, 0, drawCanvasRef.current.width, drawCanvasRef.current.height);
     }
-    r.undoStack = []; 
+    undoStack.reset();
 
     renderScene();
   };
 
-  const handlePointerDown = (e: React.PointerEvent) => {
-    if (e.pointerType !== 'pen' && e.pointerType !== 'mouse') return;
-    const r = refs.current;
-    if (!r.ctxDraw) return;
-    
-    r.undoStack.push(r.ctxDraw.getImageData(0, 0, drawCanvasRef.current!.width, drawCanvasRef.current!.height));
-    if (r.undoStack.length > 20) r.undoStack.shift();
-
-    r.isDrawing = true; 
-    r.lastX = e.clientX; 
-    r.lastY = e.clientY;
-    
-    r.ctxDraw.beginPath();
-    r.ctxDraw.arc(e.clientX, e.clientY, 1.5, 0, Math.PI * 2);
-    r.ctxDraw.fillStyle = currentTool === 'eraser' ? 'rgba(0,0,0,1)' : currentColor;
-    if (currentTool === 'eraser') r.ctxDraw.globalCompositeOperation = 'destination-out';
-    else r.ctxDraw.globalCompositeOperation = 'source-over';
-    r.ctxDraw.fill();
-  };
-
-  const handlePointerMove = (e: React.PointerEvent) => {
-    const r = refs.current;
-    if (!r.isDrawing || !r.ctxDraw) return;
-    if (e.pointerType !== 'pen' && e.pointerType !== 'mouse') return;
-    
-    r.ctxDraw.beginPath();
-    r.ctxDraw.moveTo(r.lastX, r.lastY);
-    r.ctxDraw.lineTo(e.clientX, e.clientY);
-
-    if (currentTool === 'eraser') {
-      r.ctxDraw.globalCompositeOperation = 'destination-out';
-      r.ctxDraw.lineWidth = 60;
-      r.ctxDraw.strokeStyle = 'rgba(0,0,0,1)';
-    } else {
-      r.ctxDraw.globalCompositeOperation = 'source-over';
-      r.ctxDraw.lineWidth = 3;
-      r.ctxDraw.strokeStyle = currentColor;
-    }
-    
-    r.ctxDraw.stroke();
-    r.lastX = e.clientX; 
-    r.lastY = e.clientY;
-  };
-
-  const handlePointerUp = () => { refs.current.isDrawing = false; };
-
-  useEffect(() => {
-    const canvas = drawCanvasRef.current;
-    if (!canvas) return;
-
-    const onTouchStart = (e: TouchEvent) => {
-      if (e.touches.length === 2) {
-        const dx = e.touches[0].clientX - e.touches[1].clientX;
-        const dy = e.touches[0].clientY - e.touches[1].clientY;
-        refs.current.initialPinchDist = Math.sqrt(dx * dx + dy * dy);
-        refs.current.initialZoom = sr.current.zoom;
-      }
-    };
-
-    const onTouchMove = (e: TouchEvent) => {
-      if (e.touches.length === 2 && refs.current.initialPinchDist) {
-        const dx = e.touches[0].clientX - e.touches[1].clientX;
-        const dy = e.touches[0].clientY - e.touches[1].clientY;
-        const dist = Math.sqrt(dx * dx + dy * dy);
-        const scale = dist / refs.current.initialPinchDist;
-        setZoomSync(Math.max(0.1, Math.min(5.0, refs.current.initialZoom * scale)));
-      }
-    };
-
-    const onTouchEnd = () => { refs.current.initialPinchDist = null; };
-
-    const onWheel = (e: WheelEvent) => {
-      e.preventDefault();
-      setZoomSync(z => Math.max(0.1, Math.min(5.0, z - e.deltaY * 0.005)));
-    };
-
-    canvas.addEventListener('touchstart', onTouchStart, { passive: false });
-    canvas.addEventListener('touchmove', onTouchMove, { passive: false });
-    canvas.addEventListener('touchend', onTouchEnd);
-    canvas.addEventListener('touchcancel', onTouchEnd);
-    canvas.addEventListener('wheel', onWheel, { passive: false });
-
-    return () => {
-      canvas.removeEventListener('touchstart', onTouchStart);
-      canvas.removeEventListener('touchmove', onTouchMove);
-      canvas.removeEventListener('touchend', onTouchEnd);
-      canvas.removeEventListener('touchcancel', onTouchEnd);
-      canvas.removeEventListener('wheel', onWheel);
-    };
-  }, []);
-
-  const performUndo = () => {
-    const r = refs.current;
-    if (!r.ctxDraw) return;
-    if (r.undoStack.length > 0) {
-      r.ctxDraw.putImageData(r.undoStack.pop()!, 0, 0);
-    } else {
-      r.ctxDraw.clearRect(0, 0, drawCanvasRef.current!.width, drawCanvasRef.current!.height);
-    }
-  };
-
   const handleExportGif = () => {
-    const r = refs.current;
-    if (!r.scene || !r.camera || !r.mainRenderer || isExporting) return;
-    
-    setIsExporting(true);
-    const scale = Math.min(1, 800 / window.innerWidth);
-    const exportWidth = window.innerWidth * scale;
-    const exportHeight = window.innerHeight * scale;
+    gif.exportGif((withAnswer, exportWidth, exportHeight) => {
+      const r = refs.current;
+      if (!r.scene || !r.camera || !r.mainRenderer) return '';
 
-    const captureFrame = (withAnswer: boolean) => {
       if (r.answerGroup) r.answerGroup.visible = withAnswer;
       if (r.userGroup) r.userGroup.visible = withAnswer;
-      r.mainRenderer!.render(r.scene!, r.camera!);
+      r.mainRenderer.render(r.scene, r.camera);
 
       const tCanvas = document.createElement('canvas');
       tCanvas.width = exportWidth; tCanvas.height = exportHeight;
@@ -533,46 +410,16 @@ export default function RatioCuboidMode() {
 
       tCtx.fillStyle = '#f5f5f7';
       tCtx.fillRect(0, 0, exportWidth, exportHeight);
-
       tCtx.drawImage(mainCanvasRef.current!, 0, 0, exportWidth, exportHeight);
       tCtx.drawImage(drawCanvasRef.current!, 0, 0, exportWidth, exportHeight);
       
-      return tCanvas.toDataURL('image/png');
-    };
+      if (r.answerGroup) r.answerGroup.visible = visRef.current.isAnswerVisible;
+      if (r.userGroup) r.userGroup.visible = visRef.current.isAnswerVisible;
+      r.mainRenderer.render(r.scene, r.camera);
 
-    gifshot.createGIF({
-      images: [captureFrame(false), captureFrame(true)],
-      gifWidth: exportWidth,
-      gifHeight: exportHeight,
-      interval: 1 
-    }, function(obj: any) {
-      if(!obj.error) {
-        const a = document.createElement('a');
-        a.href = obj.image;
-        a.download = 'ratio_cuboid.gif';
-        document.body.appendChild(a);
-        a.click();
-        document.body.removeChild(a);
-      } else {
-        alert("GIFの生成に失敗しました。");
-      }
-      if (r.answerGroup) r.answerGroup.visible = sr.current.isAnswerVisible;
-      if (r.userGroup) r.userGroup.visible = sr.current.isAnswerVisible;
-      r.mainRenderer!.render(r.scene!, r.camera!);
-      setIsExporting(false);
+      return tCanvas.toDataURL('image/png');
     });
   };
-
-  useEffect(() => {
-    const handleKeyDown = (e: KeyboardEvent) => {
-      if ((e.ctrlKey || e.metaKey) && e.key === 'z') {
-        e.preventDefault();
-        performUndo();
-      }
-    };
-    window.addEventListener('keydown', handleKeyDown);
-    return () => window.removeEventListener('keydown', handleKeyDown);
-  }, []);
 
   return (
     <>
@@ -586,11 +433,47 @@ export default function RatioCuboidMode() {
           cursor: 'crosshair', 
           touchAction: 'none'
         }} 
-        onPointerDown={handlePointerDown}
-        onPointerMove={handlePointerMove}
-        onPointerUp={handlePointerUp}
-        onPointerCancel={handlePointerUp}
+        onPointerDown={drawing.handlers.onPointerDown}
+        onPointerMove={drawing.handlers.onPointerMove}
+        onPointerUp={drawing.handlers.onPointerUp}
+        onPointerCancel={drawing.handlers.onPointerUp}
       />
+
+      <PerspectiveControls
+        fov={cam.fov}
+        rx={cam.rx}
+        ry={cam.ry}
+        fovRange={cam.fovRange}
+        onFovChange={cam.setFovSync}
+        onRxChange={cam.setRxSync}
+        onRyChange={cam.setRySync}
+        isGridVisible={isGridVisible}
+        onGridToggle={() => setGridSync(!isGridVisible)}
+        isAnswerVisible={isAnswerVisible}
+        onAnswerToggle={() => setAnswerSync(!isAnswerVisible)}
+        onNextQuestion={generateRandomBlock}
+        onClearAll={undoStack.clearAll}
+      >
+        <div style={{ marginBottom: 12 }}>
+          <label style={{ fontSize: 12, fontWeight: 'bold', display: 'block', marginBottom: 4 }}>問題タイプ</label>
+          <div style={{ display: 'flex', gap: 4 }}>
+            <button 
+              className={`glass-button ${modeType === 'random' ? 'btn-primary' : 'btn-light'}`}
+              style={{ flex: 1, padding: '4px 0', fontSize: 12 }}
+              onClick={() => setModeType('random')}
+            >
+              3辺ランダム
+            </button>
+            <button 
+              className={`glass-button ${modeType === 'two_same' ? 'btn-primary' : 'btn-light'}`}
+              style={{ flex: 1, padding: '4px 0', fontSize: 12 }}
+              onClick={() => setModeType('two_same')}
+            >
+              2辺同じ
+            </button>
+          </div>
+        </div>
+      </PerspectiveControls>
 
       {isAnswerVisible && (
         <div style={{
@@ -635,40 +518,6 @@ export default function RatioCuboidMode() {
         </div>
       )}
 
-      <div className="glass-panel" style={{ position: 'absolute', top: 20, left: 20, padding: 16, zIndex: 20, width: 220 }}>
-        <div style={{ marginBottom: 12 }}>
-          <label style={{ fontSize: 12, fontWeight: 'bold', display: 'block', marginBottom: 4 }}>問題タイプ</label>
-          <div style={{ display: 'flex', gap: 4 }}>
-            <button 
-              className={`glass-button ${modeType === 'random' ? 'btn-primary' : 'btn-light'}`}
-              style={{ flex: 1, padding: '4px 0', fontSize: 12 }}
-              onClick={() => setModeType('random')}
-            >
-              3辺ランダム
-            </button>
-            <button 
-              className={`glass-button ${modeType === 'two_same' ? 'btn-primary' : 'btn-light'}`}
-              style={{ flex: 1, padding: '4px 0', fontSize: 12 }}
-              onClick={() => setModeType('two_same')}
-            >
-              2辺同じ
-            </button>
-          </div>
-        </div>
-        <div style={{ marginBottom: 12, fontSize: 14, fontWeight: 'bold' }}>
-          <label>パースの強さ: <span>{fov}</span></label>
-          <input type="range" min="30" max="120" value={fov} onChange={e => setFovSync(Number(e.target.value))} style={{ width: '100%', marginTop: 6 }} />
-        </div>
-        <div style={{ marginBottom: 12, fontSize: 14, fontWeight: 'bold' }}>
-          <label>縦アングル: <span>{rx}</span>°</label>
-          <input type="range" min="-80" max="80" value={rx} onChange={e => setRxSync(Number(e.target.value))} style={{ width: '100%', marginTop: 6 }} />
-        </div>
-        <div style={{ fontSize: 14, fontWeight: 'bold' }}>
-          <label>横アングル: <span>{ry}</span>°</label>
-          <input type="range" min="-180" max="180" value={ry} onChange={e => setRySync(Number(e.target.value))} style={{ width: '100%', marginTop: 6 }} />
-        </div>
-      </div>
-
       <div className="glass-panel" style={{ position: 'absolute', top: 20, right: 20, width: 200, height: 200, overflow: 'hidden', zIndex: 20, padding: 0 }}>
         <div style={{ position: 'absolute', top: 0, left: 0, width: '100%', background: 'rgba(0,0,0,0.7)', color: 'white', fontSize: 12, textAlign: 'center', padding: '4px 0', zIndex: 21 }}>
           3Dサムネイル
@@ -676,38 +525,13 @@ export default function RatioCuboidMode() {
         <canvas ref={thumbnailCanvasRef} style={{ width: '100%', height: '100%', display: 'block' }} />
       </div>
 
-      <div className="glass-panel" style={{ position: 'absolute', bottom: 30, right: 30, zIndex: 20, display: 'flex', alignItems: 'center', gap: 10, padding: 10, borderRadius: 30 }}>
-        <div style={{ display: 'flex', gap: 6, marginRight: 10, paddingRight: 10, borderRight: '1px solid rgba(0,0,0,0.1)' }}>
-          {COLORS.map(c => (
-            <button
-              key={c}
-              onClick={() => { setCurrentTool('pen'); setCurrentColor(c); }}
-              style={{
-                width: 24, height: 24, borderRadius: '50%', backgroundColor: c, border: 'none', cursor: 'pointer',
-                boxShadow: currentColor === c && currentTool === 'pen' ? `0 0 0 3px white, 0 0 0 5px ${c}` : 'none',
-                transition: '0.2s'
-              }}
-            />
-          ))}
-        </div>
-        <button className={`btn-tool ${currentTool === 'eraser' ? 'active' : ''}`} onClick={() => setCurrentTool('eraser')}>消しゴム</button>
-        <button className="btn-tool" onClick={performUndo}>↶ Undo</button>
-      </div>
-
-      <div style={{ position: 'absolute', bottom: 30, left: 30, zIndex: 20 }}>
-        <button className="glass-button btn-warning" onClick={handleExportGif} disabled={isExporting}>
-          {isExporting ? '生成中...' : 'GIF保存'}
-        </button>
-      </div>
-
-      <div style={{ position: 'absolute', bottom: 30, left: '50%', transform: 'translateX(-50%)', zIndex: 20, display: 'flex', gap: 12 }}>
-        <button className="glass-button btn-light" onClick={() => { refs.current.ctxDraw?.clearRect(0, 0, drawCanvasRef.current!.width, drawCanvasRef.current!.height); refs.current.undoStack.push(refs.current.ctxDraw!.getImageData(0, 0, drawCanvasRef.current!.width, drawCanvasRef.current!.height)); }}>全消去</button>
-        <button className="glass-button btn-success" onClick={generateRandomBlock}>次のお題</button>
-        <button className={`glass-button btn-primary outline ${isGridVisible ? 'active' : ''}`} onClick={() => setGridSync(!isGridVisible)}>補助線</button>
-        <button className={`glass-button ${isAnswerVisible ? 'btn-danger' : 'btn-primary'}`} style={{ width: 140 }} onClick={() => setAnswerSync(!isAnswerVisible)}>
-          {isAnswerVisible ? '答えを隠す' : '答え合わせ'}
-        </button>
-      </div>
+      <DrawingToolbar
+        drawing={drawing}
+        onUndo={undoStack.performUndo}
+        onClearAll={undoStack.clearAll}
+        onExportGif={handleExportGif}
+        isExporting={gif.isExporting}
+      />
     </>
   );
 }

@@ -6,8 +6,6 @@ export const DEFAULT_PALETTE = ['#607d8b', '#ff3b30', '#34c759', '#007aff', '#11
 
 /** Options for the useDrawingCanvas hook. */
 export interface UseDrawingCanvasOptions {
-  /** Ref to the drawing canvas element. */
-  canvasRef: RefObject<HTMLCanvasElement | null>;
   /** Undo stack handle (from useUndoStack) used to snapshot before each stroke. */
   undoStack: UndoStackHandle;
   /** Selectable colour palette. Defaults to {@link DEFAULT_PALETTE}. */
@@ -45,11 +43,10 @@ export interface UseDrawingCanvasReturn {
  * accepted (touch is ignored). Tool and colour state are mirrored into refs
  * to prevent stale closures inside the pointer handlers.
  *
- * @param options - Drawing configuration including canvas ref, undo stack, palette, and widths.
+ * @param options - Drawing configuration including undo stack, palette, and widths.
  * @returns A {@link UseDrawingCanvasReturn} with state, setters, palette, and event handlers.
  */
 const useDrawingCanvas = ({
-  canvasRef,
   undoStack,
   palette = [...DEFAULT_PALETTE],
   penWidth = 3,

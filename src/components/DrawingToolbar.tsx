@@ -12,8 +12,6 @@ export interface DrawingToolbarProps {
   };
   /** Callback to undo the last stroke */
   onUndo: () => void;
-  /** Callback to clear all drawn content */
-  onClearAll: () => void;
   /** Optional callback to export as GIF. If provided, the GIF button is rendered. */
   onExportGif?: () => void;
   /** Whether a GIF export is currently in progress */
@@ -22,7 +20,7 @@ export interface DrawingToolbarProps {
 
 /**
  * A reusable bottom toolbar containing color palette, eraser, undo,
- * clear all, and optional GIF export button.
+ * and optional GIF export button.
  *
  * Renders a bottom-right glass-panel with drawing tools and an optional
  * bottom-left GIF export button.
@@ -30,7 +28,6 @@ export interface DrawingToolbarProps {
 const DrawingToolbar: React.FC<DrawingToolbarProps> = ({
   drawing,
   onUndo,
-  onClearAll,
   onExportGif,
   isExporting = false,
 }) => {

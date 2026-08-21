@@ -1,18 +1,18 @@
 import { useEffect, useRef, useState } from 'react';
 import * as THREE from 'three';
-import gifshot from 'gifshot';
-
-const COLORS = ['#607d8b', '#ab47bc', '#81c784', '#64b5f6', '#111111'];
+import useUndoStack from '../hooks/useUndoStack';
+import useDrawingCanvas from '../hooks/useDrawingCanvas';
+import useZoomControls from '../hooks/useZoomControls';
+import useGifExport from '../hooks/useGifExport';
+import useCanvasResize from '../hooks/useCanvasResize';
+import DrawingToolbar from './DrawingToolbar';
 
 export default function RatioPlaneMode() {
   const mainCanvasRef = useRef<HTMLCanvasElement>(null);
   const drawCanvasRef = useRef<HTMLCanvasElement>(null);
 
-  const [currentTool, setCurrentTool] = useState<'pen' | 'eraser'>('pen');
-  const [currentColor, setCurrentColor] = useState<string>(COLORS[0]);
   const [isGridVisible, setIsGridVisible] = useState(false);
   const [isAnswerVisible, setIsAnswerVisible] = useState(false);
-  const [isExporting, setIsExporting] = useState(false);
   
   const [modeType, setModeType] = useState<'rectangle' | 'triangle'>('rectangle');
 
@@ -32,13 +32,15 @@ export default function RatioPlaneMode() {
     gridGroup: null as THREE.Group | null,
     answerGroup: null as THREE.Group | null,
     userGroup: null as THREE.Group | null,
-    isDrawing: false,
-    lastX: 0,
-    lastY: 0,
-    initialPinchDist: null as number | null,
-    initialZoom: 1.0,
-    undoStack: [] as ImageData[],
-    ctxDraw: null as CanvasRenderingContext2D | null,
+  });
+
+  // --- Shared Hooks ---
+  const undoStack = useUndoStack({ canvasRef: drawCanvasRef });
+
+  const drawing = useDrawingCanvas({
+    canvasRef: drawCanvasRef,
+    undoStack,
+    palette: ['#607d8b', '#ab47bc', '#81c784', '#64b5f6', '#111111']
   });
 
   const renderScene = () => {
@@ -72,6 +74,24 @@ export default function RatioPlaneMode() {
   const setGridSync = (v: boolean) => { sr.current.isGridVisible = v; setIsGridVisible(v); renderScene(); };
   const setAnswerSync = (v: boolean) => { sr.current.isAnswerVisible = v; setIsAnswerVisible(v); renderScene(); };
 
+  useZoomControls({
+    canvasRef: drawCanvasRef,
+    onZoomChange: setZoomSync,
+    getZoom: () => sr.current.zoom,
+  });
+
+  const gif = useGifExport({ filename: 'ratio_plane' });
+
+  useCanvasResize({
+    drawCanvasRef,
+    ctxRef: undoStack.ctxRef,
+    onResize: (w, h) => {
+      const r = refs.current;
+      if (r.mainRenderer) r.mainRenderer.setSize(w, h);
+      renderScene();
+    },
+  });
+
   useEffect(() => {
     sr.current.modeType = modeType;
     generateRandomBlock();
@@ -81,9 +101,6 @@ export default function RatioPlaneMode() {
   useEffect(() => {
     const onContextMenu = (e: Event) => e.preventDefault();
     window.addEventListener('contextmenu', onContextMenu, { passive: false });
-
-    const cDraw = drawCanvasRef.current!;
-    refs.current.ctxDraw = cDraw.getContext('2d');
 
     const scene = new THREE.Scene();
     scene.background = new THREE.Color(0xf5f5f7);
@@ -103,31 +120,10 @@ export default function RatioPlaneMode() {
     refs.current.camera = camera;
     refs.current.mainRenderer = mainRenderer;
 
-    const onResize = () => {
-      const w = window.innerWidth;
-      const h = window.innerHeight;
-      const r = refs.current;
-      const tempImageData = r.undoStack.length > 0 && r.ctxDraw ? r.ctxDraw.getImageData(0, 0, cDraw.width, cDraw.height) : null;
-      
-      cDraw.width = w; cDraw.height = h;
-      mainRenderer.setSize(w, h);
-      
-      if (r.ctxDraw) {
-        r.ctxDraw.lineCap = 'round';
-        r.ctxDraw.lineJoin = 'round';
-        if (tempImageData) r.ctxDraw.putImageData(tempImageData, 0, 0);
-      }
-      
-      renderScene();
-    };
-    window.addEventListener('resize', onResize);
-    onResize();
-
     generateRandomBlock();
 
     return () => {
       window.removeEventListener('contextmenu', onContextMenu);
-      window.removeEventListener('resize', onResize);
       mainRenderer.dispose();
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -377,175 +373,39 @@ export default function RatioPlaneMode() {
       setIsAnswerVisible(false);
     }
 
-    if (r.ctxDraw && drawCanvasRef.current) {
-      r.ctxDraw.clearRect(0, 0, drawCanvasRef.current.width, drawCanvasRef.current.height);
+    // Clear drawing canvas and undo stack
+    const ctx = undoStack.ctxRef.current;
+    if (ctx && drawCanvasRef.current) {
+      ctx.clearRect(0, 0, drawCanvasRef.current.width, drawCanvasRef.current.height);
     }
-    r.undoStack = []; 
+    undoStack.reset();
 
     renderScene();
   };
 
-  const handlePointerDown = (e: React.PointerEvent) => {
-    if (e.pointerType !== 'pen' && e.pointerType !== 'mouse') return;
-    const r = refs.current;
-    if (!r.ctxDraw) return;
-    
-    r.undoStack.push(r.ctxDraw.getImageData(0, 0, drawCanvasRef.current!.width, drawCanvasRef.current!.height));
-    if (r.undoStack.length > 20) r.undoStack.shift();
-
-    r.isDrawing = true; 
-    r.lastX = e.clientX; 
-    r.lastY = e.clientY;
-    
-    r.ctxDraw.beginPath();
-    r.ctxDraw.arc(e.clientX, e.clientY, 1.5, 0, Math.PI * 2);
-    r.ctxDraw.fillStyle = currentTool === 'eraser' ? 'rgba(0,0,0,1)' : currentColor;
-    if (currentTool === 'eraser') r.ctxDraw.globalCompositeOperation = 'destination-out';
-    else r.ctxDraw.globalCompositeOperation = 'source-over';
-    r.ctxDraw.fill();
-  };
-
-  const handlePointerMove = (e: React.PointerEvent) => {
-    const r = refs.current;
-    if (!r.isDrawing || !r.ctxDraw) return;
-    if (e.pointerType !== 'pen' && e.pointerType !== 'mouse') return;
-    
-    r.ctxDraw.beginPath();
-    r.ctxDraw.moveTo(r.lastX, r.lastY);
-    r.ctxDraw.lineTo(e.clientX, e.clientY);
-
-    if (currentTool === 'eraser') {
-      r.ctxDraw.globalCompositeOperation = 'destination-out';
-      r.ctxDraw.lineWidth = 60;
-      r.ctxDraw.strokeStyle = 'rgba(0,0,0,1)';
-    } else {
-      r.ctxDraw.globalCompositeOperation = 'source-over';
-      r.ctxDraw.lineWidth = 3;
-      r.ctxDraw.strokeStyle = currentColor;
-    }
-    
-    r.ctxDraw.stroke();
-    r.lastX = e.clientX; 
-    r.lastY = e.clientY;
-  };
-
-  const handlePointerUp = () => { refs.current.isDrawing = false; };
-
-  useEffect(() => {
-    const canvas = drawCanvasRef.current;
-    if (!canvas) return;
-
-    const onTouchStart = (e: TouchEvent) => {
-      if (e.touches.length === 2) {
-        const dx = e.touches[0].clientX - e.touches[1].clientX;
-        const dy = e.touches[0].clientY - e.touches[1].clientY;
-        refs.current.initialPinchDist = Math.sqrt(dx * dx + dy * dy);
-        refs.current.initialZoom = sr.current.zoom;
-      }
-    };
-
-    const onTouchMove = (e: TouchEvent) => {
-      if (e.touches.length === 2 && refs.current.initialPinchDist) {
-        const dx = e.touches[0].clientX - e.touches[1].clientX;
-        const dy = e.touches[0].clientY - e.touches[1].clientY;
-        const dist = Math.sqrt(dx * dx + dy * dy);
-        const scale = dist / refs.current.initialPinchDist;
-        setZoomSync(Math.max(0.1, Math.min(5.0, refs.current.initialZoom * scale)));
-      }
-    };
-
-    const onTouchEnd = () => { refs.current.initialPinchDist = null; };
-
-    const onWheel = (e: WheelEvent) => {
-      e.preventDefault();
-      setZoomSync(z => Math.max(0.1, Math.min(5.0, z - e.deltaY * 0.005)));
-    };
-
-    canvas.addEventListener('touchstart', onTouchStart, { passive: false });
-    canvas.addEventListener('touchmove', onTouchMove, { passive: false });
-    canvas.addEventListener('touchend', onTouchEnd);
-    canvas.addEventListener('touchcancel', onTouchEnd);
-    canvas.addEventListener('wheel', onWheel, { passive: false });
-
-    return () => {
-      canvas.removeEventListener('touchstart', onTouchStart);
-      canvas.removeEventListener('touchmove', onTouchMove);
-      canvas.removeEventListener('touchend', onTouchEnd);
-      canvas.removeEventListener('touchcancel', onTouchEnd);
-      canvas.removeEventListener('wheel', onWheel);
-    };
-  }, []);
-
-  const performUndo = () => {
-    const r = refs.current;
-    if (!r.ctxDraw) return;
-    if (r.undoStack.length > 0) {
-      r.ctxDraw.putImageData(r.undoStack.pop()!, 0, 0);
-    } else {
-      r.ctxDraw.clearRect(0, 0, drawCanvasRef.current!.width, drawCanvasRef.current!.height);
-    }
-  };
-
   const handleExportGif = () => {
-    const r = refs.current;
-    if (!r.scene || !r.camera || !r.mainRenderer || isExporting) return;
-    
-    setIsExporting(true);
-    const scale = Math.min(1, 800 / window.innerWidth);
-    const exportWidth = window.innerWidth * scale;
-    const exportHeight = window.innerHeight * scale;
-
-    const captureFrame = (withAnswer: boolean) => {
+    gif.exportGif((withAnswer, exportWidth, exportHeight) => {
+      const r = refs.current;
+      if (!r.scene || !r.camera || !r.mainRenderer) return '';
       if (r.answerGroup) r.answerGroup.visible = withAnswer;
       if (r.userGroup) r.userGroup.visible = withAnswer;
-      r.mainRenderer!.render(r.scene!, r.camera!);
-
+      r.mainRenderer.render(r.scene, r.camera);
       const tCanvas = document.createElement('canvas');
       tCanvas.width = exportWidth; tCanvas.height = exportHeight;
       const tCtx = tCanvas.getContext('2d')!;
-
       tCtx.fillStyle = '#f5f5f7';
       tCtx.fillRect(0, 0, exportWidth, exportHeight);
-
       tCtx.drawImage(mainCanvasRef.current!, 0, 0, exportWidth, exportHeight);
       tCtx.drawImage(drawCanvasRef.current!, 0, 0, exportWidth, exportHeight);
       
-      return tCanvas.toDataURL('image/png');
-    };
-
-    gifshot.createGIF({
-      images: [captureFrame(false), captureFrame(true)],
-      gifWidth: exportWidth,
-      gifHeight: exportHeight,
-      interval: 1 
-    }, function(obj: any) {
-      if(!obj.error) {
-        const a = document.createElement('a');
-        a.href = obj.image;
-        a.download = 'ratio_plane.gif';
-        document.body.appendChild(a);
-        a.click();
-        document.body.removeChild(a);
-      } else {
-        alert("GIFの生成に失敗しました。");
-      }
+      // Restore
       if (r.answerGroup) r.answerGroup.visible = sr.current.isAnswerVisible;
       if (r.userGroup) r.userGroup.visible = sr.current.isAnswerVisible;
-      r.mainRenderer!.render(r.scene!, r.camera!);
-      setIsExporting(false);
+      r.mainRenderer.render(r.scene, r.camera);
+
+      return tCanvas.toDataURL('image/png');
     });
   };
-
-  useEffect(() => {
-    const handleKeyDown = (e: KeyboardEvent) => {
-      if ((e.ctrlKey || e.metaKey) && e.key === 'z') {
-        e.preventDefault();
-        performUndo();
-      }
-    };
-    window.addEventListener('keydown', handleKeyDown);
-    return () => window.removeEventListener('keydown', handleKeyDown);
-  }, []);
 
   return (
     <>
@@ -559,10 +419,10 @@ export default function RatioPlaneMode() {
           cursor: 'crosshair', 
           touchAction: 'none'
         }} 
-        onPointerDown={handlePointerDown}
-        onPointerMove={handlePointerMove}
-        onPointerUp={handlePointerUp}
-        onPointerCancel={handlePointerUp}
+        onPointerDown={drawing.handlers.onPointerDown}
+        onPointerMove={drawing.handlers.onPointerMove}
+        onPointerUp={drawing.handlers.onPointerUp}
+        onPointerCancel={drawing.handlers.onPointerUp}
       />
 
       {isAnswerVisible && modeType === 'rectangle' && (
@@ -647,32 +507,15 @@ export default function RatioPlaneMode() {
         </div>
       </div>
 
-      <div className="glass-panel" style={{ position: 'absolute', bottom: 30, right: 30, zIndex: 20, display: 'flex', alignItems: 'center', gap: 10, padding: 10, borderRadius: 30 }}>
-        <div style={{ display: 'flex', gap: 6, marginRight: 10, paddingRight: 10, borderRight: '1px solid rgba(0,0,0,0.1)' }}>
-          {COLORS.map(c => (
-            <button
-              key={c}
-              onClick={() => { setCurrentTool('pen'); setCurrentColor(c); }}
-              style={{
-                width: 24, height: 24, borderRadius: '50%', backgroundColor: c, border: 'none', cursor: 'pointer',
-                boxShadow: currentColor === c && currentTool === 'pen' ? `0 0 0 3px white, 0 0 0 5px ${c}` : 'none',
-                transition: '0.2s'
-              }}
-            />
-          ))}
-        </div>
-        <button className={`btn-tool ${currentTool === 'eraser' ? 'active' : ''}`} onClick={() => setCurrentTool('eraser')}>消しゴム</button>
-        <button className="btn-tool" onClick={performUndo}>↶ Undo</button>
-      </div>
-
-      <div style={{ position: 'absolute', bottom: 30, left: 30, zIndex: 20 }}>
-        <button className="glass-button btn-warning" onClick={handleExportGif} disabled={isExporting}>
-          {isExporting ? '生成中...' : 'GIF保存'}
-        </button>
-      </div>
+      <DrawingToolbar
+        drawing={drawing}
+        onUndo={undoStack.performUndo}
+        onClearAll={undoStack.clearAll}
+        onExportGif={handleExportGif}
+        isExporting={gif.isExporting}
+      />
 
       <div style={{ position: 'absolute', bottom: 30, left: '50%', transform: 'translateX(-50%)', zIndex: 20, display: 'flex', gap: 12 }}>
-        <button className="glass-button btn-light" onClick={() => { refs.current.ctxDraw?.clearRect(0, 0, drawCanvasRef.current!.width, drawCanvasRef.current!.height); refs.current.undoStack.push(refs.current.ctxDraw!.getImageData(0, 0, drawCanvasRef.current!.width, drawCanvasRef.current!.height)); }}>全消去</button>
         <button className="glass-button btn-success" onClick={generateRandomBlock}>次のお題</button>
         <button className={`glass-button btn-primary outline ${isGridVisible ? 'active' : ''}`} onClick={() => setGridSync(!isGridVisible)}>補助線</button>
         <button className={`glass-button ${isAnswerVisible ? 'btn-danger' : 'btn-primary'}`} style={{ width: 140 }} onClick={() => setAnswerSync(!isAnswerVisible)}>
