@@ -1,4 +1,5 @@
 import { useEffect, useRef, useCallback, type RefObject, type MutableRefObject } from 'react';
+import type { Stroke } from '../types/drawing';
 
 /** Options for the useUndoStack hook. */
 export interface UseUndoStackOptions {
@@ -10,34 +11,28 @@ export interface UseUndoStackOptions {
 
 /** Handle returned by the useUndoStack hook. */
 export interface UndoStackHandle {
-  /** Capture the current canvas state and push it onto the undo stack. */
-  pushSnapshot: () => void;
-  /** Pop the last snapshot and restore it, or clear the canvas if the stack is empty. */
-  performUndo: () => void;
-  /**
-   * Push a snapshot of the current drawing, then clear the canvas.
-   * The snapshot-first ordering ensures the user can undo back to the
-   * pre-clear state (fixing the original bug where clear happened before push).
-   */
-  clearAll: () => void;
-  /** Empty the undo stack entirely (e.g. when generating a new problem). */
+  /** Get the current array of strokes. */
+  getCurrentStrokes: () => Stroke[];
+  /** Push a new stroke onto the stack. */
+  pushStroke: (stroke: Stroke) => void;
+  /** Pop the last stroke and restore it, calling redrawAll with the new state. */
+  performUndo: (redrawAll?: (strokes: Stroke[]) => void) => void;
+  /** Push an empty state to the history, calling redrawAll. */
+  clearAll: (redrawAll?: (strokes: Stroke[]) => void) => void;
+  /** Empty the undo stack entirely. */
   reset: () => void;
   /** Mutable ref to the 2D rendering context initialised by this hook. */
   ctxRef: MutableRefObject<CanvasRenderingContext2D | null>;
 }
 
 /**
- * Hook that manages an undo stack for a 2D drawing canvas.
- *
- * The stack is stored in a ref (not state) so that pushes/pops do not trigger
- * React re-renders. A `Ctrl+Z` / `Cmd+Z` keyboard shortcut is registered
- * automatically and cleaned up on unmount.
+ * Hook that manages an undo stack for a 2D drawing canvas using vector strokes.
  *
  * @param options - Configuration including the canvas ref and optional max size.
- * @returns An {@link UndoStackHandle} with push/undo/clear/reset helpers and the context ref.
+ * @returns An {@link UndoStackHandle} with pushStroke/performUndo/clearAll/reset helpers and the context ref.
  */
 const useUndoStack = ({ canvasRef, maxSize = 20 }: UseUndoStackOptions): UndoStackHandle => {
-  const stackRef = useRef<ImageData[]>([]);
+  const historyRef = useRef<Stroke[][]>([[]]);
   const ctxRef = useRef<CanvasRenderingContext2D | null>(null);
 
   // Initialise the 2D context once the canvas is mounted.
@@ -51,61 +46,46 @@ const useUndoStack = ({ canvasRef, maxSize = 20 }: UseUndoStackOptions): UndoSta
       ctx.lineJoin = 'round';
       ctxRef.current = ctx;
     }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
-
-  const pushSnapshot = useCallback(() => {
-    const ctx = ctxRef.current;
-    const canvas = canvasRef.current;
-    if (!ctx || !canvas) return;
-
-    stackRef.current.push(ctx.getImageData(0, 0, canvas.width, canvas.height));
-
-    if (stackRef.current.length > maxSize) {
-      stackRef.current.shift();
-    }
-  }, [canvasRef, maxSize]);
-
-  const performUndo = useCallback(() => {
-    const ctx = ctxRef.current;
-    const canvas = canvasRef.current;
-    if (!ctx || !canvas) return;
-
-    if (stackRef.current.length > 0) {
-      ctx.putImageData(stackRef.current.pop()!, 0, 0);
-    } else {
-      ctx.clearRect(0, 0, canvas.width, canvas.height);
-    }
   }, [canvasRef]);
 
-  const clearAll = useCallback(() => {
-    const ctx = ctxRef.current;
-    const canvas = canvasRef.current;
-    if (!ctx || !canvas) return;
-
-    // BUG FIX: push snapshot FIRST so the user can undo back to pre-clear state.
-    pushSnapshot();
-    ctx.clearRect(0, 0, canvas.width, canvas.height);
-  }, [canvasRef, pushSnapshot]);
-
-  const reset = useCallback(() => {
-    stackRef.current = [];
+  const getCurrentStrokes = useCallback(() => {
+    return historyRef.current[historyRef.current.length - 1] || [];
   }, []);
 
-  // Register Ctrl+Z / Cmd+Z keyboard shortcut.
-  useEffect(() => {
-    const handleKeyDown = (e: KeyboardEvent) => {
-      if ((e.ctrlKey || e.metaKey) && e.key === 'z') {
-        e.preventDefault();
-        performUndo();
-      }
-    };
+  const pushStroke = useCallback((stroke: Stroke) => {
+    const currentState = getCurrentStrokes();
+    const newState = [...currentState, stroke];
+    
+    historyRef.current.push(newState);
+    if (historyRef.current.length > maxSize) {
+      historyRef.current.shift();
+    }
+  }, [getCurrentStrokes, maxSize]);
 
-    window.addEventListener('keydown', handleKeyDown);
-    return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [performUndo]);
+  const performUndo = useCallback((redrawAll?: (strokes: Stroke[]) => void) => {
+    if (historyRef.current.length > 1) {
+      historyRef.current.pop();
+    }
+    if (redrawAll) {
+      redrawAll(getCurrentStrokes());
+    }
+  }, [getCurrentStrokes]);
 
-  return { pushSnapshot, performUndo, clearAll, reset, ctxRef };
+  const clearAll = useCallback((redrawAll?: (strokes: Stroke[]) => void) => {
+    historyRef.current.push([]);
+    if (historyRef.current.length > maxSize) {
+      historyRef.current.shift();
+    }
+    if (redrawAll) {
+      redrawAll([]);
+    }
+  }, [maxSize]);
+
+  const reset = useCallback(() => {
+    historyRef.current = [[]];
+  }, []);
+
+  return { getCurrentStrokes, pushStroke, performUndo, clearAll, reset, ctxRef };
 };
 
 export default useUndoStack;

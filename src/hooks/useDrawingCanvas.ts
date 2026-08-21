@@ -1,5 +1,6 @@
 import { useState, useRef, useCallback, type RefObject } from 'react';
 import type { UndoStackHandle } from './useUndoStack';
+import type { Point, Stroke } from '../types/drawing';
 
 /** Default colour palette matching the original COLORS constant. */
 export const DEFAULT_PALETTE = ['#607d8b', '#ff3b30', '#34c759', '#007aff', '#111111'] as const;
@@ -34,17 +35,12 @@ export interface UseDrawingCanvasReturn {
     onPointerMove: (e: React.PointerEvent) => void;
     onPointerUp: () => void;
   };
+  /** Redraws all strokes on the canvas */
+  redrawAll: (ctx: CanvasRenderingContext2D, strokes: Stroke[]) => void;
 }
 
 /**
- * Hook that handles pen / eraser drawing on a 2D canvas overlay.
- *
- * Pointer events are filtered so that only `pen` and `mouse` inputs are
- * accepted (touch is ignored). Tool and colour state are mirrored into refs
- * to prevent stale closures inside the pointer handlers.
- *
- * @param options - Drawing configuration including undo stack, palette, and widths.
- * @returns A {@link UseDrawingCanvasReturn} with state, setters, palette, and event handlers.
+ * Hook that handles pen / eraser vector drawing on a 2D canvas overlay.
  */
 const useDrawingCanvas = ({
   undoStack,
@@ -55,7 +51,6 @@ const useDrawingCanvas = ({
   const [currentTool, setCurrentToolState] = useState<'pen' | 'eraser'>('pen');
   const [currentColor, setCurrentColorState] = useState<string>(palette[0]);
 
-  // Mirror state into refs so pointer handlers always read the latest values.
   const toolRef = useRef<'pen' | 'eraser'>(currentTool);
   const colorRef = useRef<string>(currentColor);
 
@@ -69,10 +64,45 @@ const useDrawingCanvas = ({
     setCurrentColorState(color);
   }, []);
 
-  // Drawing state kept in refs to avoid re-renders during strokes.
   const isDrawingRef = useRef(false);
-  const lastXRef = useRef(0);
-  const lastYRef = useRef(0);
+  const currentStrokeRef = useRef<Point[]>([]);
+
+  const redrawAll = useCallback((ctx: CanvasRenderingContext2D, strokes: Stroke[]) => {
+    const canvas = ctx.canvas;
+    ctx.clearRect(0, 0, canvas.width, canvas.height);
+    
+    for (const stroke of strokes) {
+      if (stroke.points.length === 0) continue;
+      
+      ctx.globalCompositeOperation = stroke.tool === 'eraser' ? 'destination-out' : 'source-over';
+      const isEraser = stroke.tool === 'eraser';
+      
+      if (stroke.points.length === 1) {
+        const p = stroke.points[0];
+        ctx.beginPath();
+        ctx.fillStyle = isEraser ? 'rgba(0,0,0,1)' : stroke.color;
+        // For a single point, just draw a dot. Using pressure if > 0.
+        const width = p.pressure > 0 ? p.pressure * stroke.width * 2 : stroke.width;
+        ctx.arc(p.x, p.y, width / 2, 0, Math.PI * 2);
+        ctx.fill();
+        continue;
+      }
+
+      for (let i = 1; i < stroke.points.length; i++) {
+        const p1 = stroke.points[i - 1];
+        const p2 = stroke.points[i];
+        
+        ctx.beginPath();
+        ctx.moveTo(p1.x, p1.y);
+        ctx.lineTo(p2.x, p2.y);
+        ctx.strokeStyle = isEraser ? 'rgba(0,0,0,1)' : stroke.color;
+        
+        const segmentWidth = p2.pressure > 0 ? p2.pressure * stroke.width * 2 : stroke.width;
+        ctx.lineWidth = segmentWidth;
+        ctx.stroke();
+      }
+    }
+  }, []);
 
   const onPointerDown = useCallback(
     (e: React.PointerEvent) => {
@@ -81,23 +111,21 @@ const useDrawingCanvas = ({
       const ctx = undoStack.ctxRef.current;
       if (!ctx) return;
 
-      // Snapshot before the stroke begins.
-      undoStack.pushSnapshot();
-
       isDrawingRef.current = true;
-      lastXRef.current = e.clientX;
-      lastYRef.current = e.clientY;
+      const point = { x: e.clientX, y: e.clientY, pressure: e.pressure };
+      currentStrokeRef.current = [point];
 
       const tool = toolRef.current;
+      const baseWidth = tool === 'eraser' ? eraserWidth : penWidth;
+      const width = e.pointerType === 'pen' && e.pressure > 0 ? e.pressure * baseWidth * 2 : baseWidth;
 
-      // Draw initial dot.
       ctx.beginPath();
-      ctx.arc(e.clientX, e.clientY, 1.5, 0, Math.PI * 2);
+      ctx.arc(e.clientX, e.clientY, width / 2, 0, Math.PI * 2);
       ctx.fillStyle = tool === 'eraser' ? 'rgba(0,0,0,1)' : colorRef.current;
       ctx.globalCompositeOperation = tool === 'eraser' ? 'destination-out' : 'source-over';
       ctx.fill();
     },
-    [undoStack],
+    [undoStack, eraserWidth, penWidth],
   );
 
   const onPointerMove = useCallback(
@@ -109,32 +137,47 @@ const useDrawingCanvas = ({
       if (!ctx) return;
 
       const tool = toolRef.current;
+      const baseWidth = tool === 'eraser' ? eraserWidth : penWidth;
+      const width = e.pointerType === 'pen' && e.pressure > 0 ? e.pressure * baseWidth * 2 : baseWidth;
+
+      const newPoint = { x: e.clientX, y: e.clientY, pressure: e.pressure };
+      const lastPoint = currentStrokeRef.current[currentStrokeRef.current.length - 1];
 
       ctx.beginPath();
-      ctx.moveTo(lastXRef.current, lastYRef.current);
-      ctx.lineTo(e.clientX, e.clientY);
+      ctx.moveTo(lastPoint.x, lastPoint.y);
+      ctx.lineTo(newPoint.x, newPoint.y);
 
       if (tool === 'eraser') {
         ctx.globalCompositeOperation = 'destination-out';
-        ctx.lineWidth = eraserWidth;
+        ctx.lineWidth = width;
         ctx.strokeStyle = 'rgba(0,0,0,1)';
       } else {
         ctx.globalCompositeOperation = 'source-over';
-        ctx.lineWidth = penWidth;
+        ctx.lineWidth = width;
         ctx.strokeStyle = colorRef.current;
       }
 
       ctx.stroke();
-
-      lastXRef.current = e.clientX;
-      lastYRef.current = e.clientY;
+      currentStrokeRef.current.push(newPoint);
     },
-    [undoStack, penWidth, eraserWidth],
+    [undoStack, eraserWidth, penWidth],
   );
 
   const onPointerUp = useCallback(() => {
+    if (!isDrawingRef.current) return;
     isDrawingRef.current = false;
-  }, []);
+
+    if (currentStrokeRef.current.length > 0) {
+      const stroke: Stroke = {
+        tool: toolRef.current,
+        color: colorRef.current,
+        width: toolRef.current === 'eraser' ? eraserWidth : penWidth,
+        points: currentStrokeRef.current,
+      };
+      undoStack.pushStroke(stroke);
+      currentStrokeRef.current = [];
+    }
+  }, [undoStack, eraserWidth, penWidth]);
 
   return {
     currentTool,
@@ -143,6 +186,7 @@ const useDrawingCanvas = ({
     setCurrentColor,
     palette,
     handlers: { onPointerDown, onPointerMove, onPointerUp },
+    redrawAll,
   };
 };
 
