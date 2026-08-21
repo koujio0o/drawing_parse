@@ -66,6 +66,8 @@ const useDrawingCanvas = ({
 
   const isDrawingRef = useRef(false);
   const currentStrokeRef = useRef<Point[]>([]);
+  // Tracks the actual tool used for the current stroke (to override UI state if using touch)
+  const activeToolRef = useRef<'pen' | 'eraser'>('pen');
 
   const redrawAll = useCallback((ctx: CanvasRenderingContext2D, strokes: Stroke[]) => {
     const canvas = ctx.canvas;
@@ -106,7 +108,8 @@ const useDrawingCanvas = ({
 
   const onPointerDown = useCallback(
     (e: React.PointerEvent) => {
-      if (e.pointerType !== 'pen' && e.pointerType !== 'mouse') return;
+      // Allow pen, mouse, and touch
+      if (e.pointerType !== 'pen' && e.pointerType !== 'mouse' && e.pointerType !== 'touch') return;
 
       const ctx = undoStack.ctxRef.current;
       if (!ctx) return;
@@ -115,7 +118,10 @@ const useDrawingCanvas = ({
       const point = { x: e.clientX, y: e.clientY, pressure: e.pressure };
       currentStrokeRef.current = [point];
 
-      const tool = toolRef.current;
+      // Auto-switch to eraser if touching with finger
+      activeToolRef.current = e.pointerType === 'touch' ? 'eraser' : toolRef.current;
+      const tool = activeToolRef.current;
+
       const baseWidth = tool === 'eraser' ? eraserWidth : penWidth;
       const width = e.pointerType === 'pen' && e.pressure > 0 ? e.pressure * baseWidth * 2 : baseWidth;
 
@@ -131,12 +137,12 @@ const useDrawingCanvas = ({
   const onPointerMove = useCallback(
     (e: React.PointerEvent) => {
       if (!isDrawingRef.current) return;
-      if (e.pointerType !== 'pen' && e.pointerType !== 'mouse') return;
+      if (e.pointerType !== 'pen' && e.pointerType !== 'mouse' && e.pointerType !== 'touch') return;
 
       const ctx = undoStack.ctxRef.current;
       if (!ctx) return;
 
-      const tool = toolRef.current;
+      const tool = activeToolRef.current;
       const baseWidth = tool === 'eraser' ? eraserWidth : penWidth;
       const width = e.pointerType === 'pen' && e.pressure > 0 ? e.pressure * baseWidth * 2 : baseWidth;
 
@@ -169,9 +175,9 @@ const useDrawingCanvas = ({
 
     if (currentStrokeRef.current.length > 0) {
       const stroke: Stroke = {
-        tool: toolRef.current,
+        tool: activeToolRef.current,
         color: colorRef.current,
-        width: toolRef.current === 'eraser' ? eraserWidth : penWidth,
+        width: activeToolRef.current === 'eraser' ? eraserWidth : penWidth,
         points: currentStrokeRef.current,
       };
       undoStack.pushStroke(stroke);
