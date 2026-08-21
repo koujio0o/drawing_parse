@@ -13,7 +13,7 @@ export interface UseDrawingCanvasOptions {
   palette?: string[];
   /** Pen stroke width in pixels. Defaults to 3. */
   penWidth?: number;
-  /** Eraser stroke width in pixels. Defaults to 60. */
+  /** Eraser stroke width in pixels. Defaults to 20. */
   eraserWidth?: number;
 }
 
@@ -46,7 +46,7 @@ const useDrawingCanvas = ({
   undoStack,
   palette = [...DEFAULT_PALETTE],
   penWidth = 3,
-  eraserWidth = 60,
+  eraserWidth = 20,
 }: UseDrawingCanvasOptions): UseDrawingCanvasReturn => {
   const [currentTool, setCurrentToolState] = useState<'pen' | 'eraser'>('pen');
   const [currentColor, setCurrentColorState] = useState<string>(palette[0]);
