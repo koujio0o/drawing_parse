@@ -29,18 +29,27 @@ const useCanvasResize = ({
       const w = window.innerWidth;
       const h = window.innerHeight;
 
+      const dpr = window.devicePixelRatio || 1;
       const drawCanvas = drawCanvasRef.current;
       if (drawCanvas) {
-        drawCanvas.width = w;
-        drawCanvas.height = h;
+        drawCanvas.width = w * dpr;
+        drawCanvas.height = h * dpr;
+        const ctx = drawCanvas.getContext('2d');
+        if (ctx) {
+          ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+        }
       }
 
       if (extraCanvasRefs) {
         for (const ref of extraCanvasRefs) {
           const canvas = ref.current;
           if (canvas) {
-            canvas.width = w;
-            canvas.height = h;
+            canvas.width = w * dpr;
+            canvas.height = h * dpr;
+            const ctx = canvas.getContext('2d');
+            if (ctx) {
+              ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+            }
           }
         }
       }
