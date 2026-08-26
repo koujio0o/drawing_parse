@@ -138,7 +138,7 @@ export default function RatioCuboidMode() {
     const thumbnailCamera = new THREE.PerspectiveCamera(50, 1, 0.1, 500);
     thumbnailCamera.lookAt(0, 0, 0);
 
-    const mainRenderer = new THREE.WebGLRenderer({ canvas: mainCanvasRef.current!, antialias: true, preserveDrawingBuffer: true });
+    const mainRenderer = new THREE.WebGLRenderer({ canvas: mainCanvasRef.current!, antialias: true });
     mainRenderer.setPixelRatio(window.devicePixelRatio);
     
     const thumbnailRenderer = new THREE.WebGLRenderer({ canvas: thumbnailCanvasRef.current!, antialias: true });

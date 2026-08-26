@@ -125,7 +125,7 @@ export default function CircleMode() {
     const camera = new THREE.PerspectiveCamera(80, window.innerWidth / window.innerHeight, 0.1, 200);
     camera.lookAt(0, 0, 0);
     
-    const renderer = new THREE.WebGLRenderer({ antialias: true, preserveDrawingBuffer: true });
+    const renderer = new THREE.WebGLRenderer({ antialias: true });
     renderer.setSize(200, 200);
     if (thumbnailRef.current) thumbnailRef.current.appendChild(renderer.domElement);
     

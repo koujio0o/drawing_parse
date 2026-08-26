@@ -115,7 +115,7 @@ export default function RatioPlaneMode() {
     camera.position.z = 10;
     camera.lookAt(0, 0, 0);
 
-    const mainRenderer = new THREE.WebGLRenderer({ canvas: mainCanvasRef.current!, antialias: true, preserveDrawingBuffer: true });
+    const mainRenderer = new THREE.WebGLRenderer({ canvas: mainCanvasRef.current!, antialias: true });
     mainRenderer.setPixelRatio(window.devicePixelRatio);
     
     scene.add(new THREE.AmbientLight(0xffffff, 1.0));
