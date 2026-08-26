@@ -188,6 +188,7 @@ export default function SubtractionMode() {
     refs.current.thumbnailRenderer = thumbnailRenderer;
 
     generateRandomBlock();
+    setTimeout(() => window.dispatchEvent(new Event("resize")), 10);
 
     return () => {
       window.removeEventListener('contextmenu', onContextMenu);

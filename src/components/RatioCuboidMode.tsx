@@ -123,6 +123,7 @@ export default function RatioCuboidMode() {
   useEffect(() => {
     sr.current.modeType = modeType;
     generateRandomBlock();
+    setTimeout(() => window.dispatchEvent(new Event("resize")), 10);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [modeType]);
 
@@ -156,6 +157,7 @@ export default function RatioCuboidMode() {
     refs.current.thumbnailRenderer = thumbnailRenderer;
 
     generateRandomBlock();
+    setTimeout(() => window.dispatchEvent(new Event("resize")), 10);
 
     return () => {
       window.removeEventListener('contextmenu', onContextMenu);

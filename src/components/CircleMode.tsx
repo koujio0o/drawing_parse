@@ -139,6 +139,7 @@ export default function CircleMode() {
     refs.current.renderer = renderer;
 
     generateRandomBlock();
+    setTimeout(() => window.dispatchEvent(new Event("resize")), 10);
 
     return () => {
       window.removeEventListener('contextmenu', onContextMenu);

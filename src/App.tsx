@@ -27,6 +27,9 @@ function App() {
         gap: '4px',
         borderRadius: '30px'
       }}>
+        <div style={{ position: 'absolute', top: '-18px', right: '0', fontSize: '10px', color: '#999' }}>
+          v:23:35
+        </div>
         <button 
           className={`glass-button ${activeTab === 'proliferation' ? 'btn-primary' : 'btn-light'}`}
           onClick={() => setActiveTab('proliferation')}
