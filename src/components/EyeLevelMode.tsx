@@ -203,14 +203,18 @@ export default function EyeLevelMode() {
     const pBot = new THREE.Vector3(0, -S/2, 0);
     addThickLine(r.targetGroup, pTop.clone().add(allCubesGroup.position), pBot.clone().add(allCubesGroup.position), refEdgeMat, 0.08);
 
-    // Answer: 3x3 grid (3 left, 3 right, forming an L-shape or full grid? Let's do a 3x3 block)
-    // "奥行きが立方体 3つ重ねる形" -> let's make a 3x3 floor of cubes
+    // Answer: 3 cubes extending to the left only
     for (let ix = 0; ix < 3; ix++) {
-      for (let iz = 0; iz < 3; iz++) {
-        addCube(ix, iz, true);
-      }
+      addCube(ix, 0, true);
     }
     
+    // Hint: Short line for the bottom-left edge (チラ見せ)
+    const hintLength = S * 0.25; // 25% of the edge length
+    const pHintLocal = new THREE.Vector3(-hintLength, -S/2, 0);
+    pHintLocal.applyAxisAngle(new THREE.Vector3(0, 1, 0), -Math.PI / 4);
+    pHintLocal.add(allCubesGroup.position);
+    addThickLine(r.targetGroup, pBot.clone().add(allCubesGroup.position), pHintLocal, refEdgeMat, 0.08);
+
     // The eye level mark (a short horizontal line at y=0, since camera is at y=0)
     const markLength = 1.0;
     const pLeft = new THREE.Vector3(-markLength/2, 0, 0);
