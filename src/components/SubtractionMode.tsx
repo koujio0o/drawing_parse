@@ -55,7 +55,7 @@ export default function SubtractionMode() {
     const ctx = canvas.getContext('2d');
     if (!ctx) return;
 
-    ctx.clearRect(0, 0, canvas.width, canvas.height);
+    ctx.clearRect(0, 0, canvas.clientWidth, canvas.clientHeight);
 
     // Guide dashed box
     ctx.strokeStyle = 'rgba(0, 122, 255, 0.5)'; 
@@ -69,8 +69,8 @@ export default function SubtractionMode() {
       const v2 = new THREE.Vector3(pos[i+3], pos[i+4], pos[i+5]).applyMatrix4(r.boundingBoxMesh.matrixWorld).project(r.camera);
       if (v1.z > 1 || v2.z > 1) continue;
       ctx.beginPath();
-      ctx.moveTo((v1.x * 0.5 + 0.5) * canvas.width, (-(v1.y) * 0.5 + 0.5) * canvas.height);
-      ctx.lineTo((v2.x * 0.5 + 0.5) * canvas.width, (-(v2.y) * 0.5 + 0.5) * canvas.height);
+      ctx.moveTo((v1.x * 0.5 + 0.5) * canvas.clientWidth, (-(v1.y) * 0.5 + 0.5) * canvas.clientHeight);
+      ctx.lineTo((v2.x * 0.5 + 0.5) * canvas.clientWidth, (-(v2.y) * 0.5 + 0.5) * canvas.clientHeight);
       ctx.stroke();
     }
     ctx.setLineDash([]);
@@ -82,8 +82,8 @@ export default function SubtractionMode() {
       const v = new THREE.Vector3().fromBufferAttribute(posAttr, i).applyMatrix4(r.boundingBoxMesh.matrixWorld);
       const dist = r.camera.position.distanceTo(v);
       v.project(r.camera);
-      const x = (v.x * 0.5 + 0.5) * canvas.width;
-      const y = (-(v.y) * 0.5 + 0.5) * canvas.height;
+      const x = (v.x * 0.5 + 0.5) * canvas.clientWidth;
+      const y = (-(v.y) * 0.5 + 0.5) * canvas.clientHeight;
       if(dist < closestDist) { closestDist = dist; startPoint = {x, y}; }
     }
     if(startPoint) {

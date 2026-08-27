@@ -266,7 +266,7 @@ export default function SphereMode() {
     if (!r.ctxGuide || !r.boundingBoxMesh || !r.camera || !r.targetGroup) return;
     const canvas = guideCanvasRef.current!;
 
-    r.ctxGuide.clearRect(0, 0, canvas.width, canvas.height);
+    r.ctxGuide.clearRect(0, 0, canvas.clientWidth, canvas.clientHeight);
 
     if (visRef.current.isGridVisible && r.gridGroup) {
       r.ctxGuide.strokeStyle = 'rgba(0, 122, 255, 0.15)';
@@ -278,8 +278,8 @@ export default function SphereMode() {
           const v2 = new THREE.Vector3(positions[i+3], positions[i+4], positions[i+5]).applyMatrix4(grid.matrixWorld).project(r.camera!);
           if(v1.z > 1 || v2.z > 1) continue;
           r.ctxGuide!.beginPath();
-          r.ctxGuide!.moveTo((v1.x * 0.5 + 0.5) * canvas.width, (-(v1.y) * 0.5 + 0.5) * canvas.height);
-          r.ctxGuide!.lineTo((v2.x * 0.5 + 0.5) * canvas.width, (-(v2.y) * 0.5 + 0.5) * canvas.height);
+          r.ctxGuide!.moveTo((v1.x * 0.5 + 0.5) * canvas.clientWidth, (-(v1.y) * 0.5 + 0.5) * canvas.clientHeight);
+          r.ctxGuide!.lineTo((v2.x * 0.5 + 0.5) * canvas.clientWidth, (-(v2.y) * 0.5 + 0.5) * canvas.clientHeight);
           r.ctxGuide!.stroke();
         }
       });
@@ -295,8 +295,8 @@ export default function SphereMode() {
       const v1 = new THREE.Vector3(pos[i], pos[i+1], pos[i+2]).applyMatrix4(r.boundingBoxMesh.matrixWorld).project(r.camera);
       const v2 = new THREE.Vector3(pos[i+3], pos[i+4], pos[i+5]).applyMatrix4(r.boundingBoxMesh.matrixWorld).project(r.camera);
       r.ctxGuide.beginPath();
-      r.ctxGuide.moveTo((v1.x * 0.5 + 0.5) * canvas.width, (-(v1.y) * 0.5 + 0.5) * canvas.height);
-      r.ctxGuide.lineTo((v2.x * 0.5 + 0.5) * canvas.width, (-(v2.y) * 0.5 + 0.5) * canvas.height);
+      r.ctxGuide.moveTo((v1.x * 0.5 + 0.5) * canvas.clientWidth, (-(v1.y) * 0.5 + 0.5) * canvas.clientHeight);
+      r.ctxGuide.lineTo((v2.x * 0.5 + 0.5) * canvas.clientWidth, (-(v2.y) * 0.5 + 0.5) * canvas.clientHeight);
       r.ctxGuide.stroke();
     }
 
@@ -316,8 +316,8 @@ export default function SphereMode() {
         const v2 = p2.clone().applyMatrix4(r.targetGroup!.matrixWorld).project(r.camera!);
         if (v1.z > 1 || v2.z > 1) return;
         r.ctxGuide!.beginPath();
-        r.ctxGuide!.moveTo((v1.x * 0.5 + 0.5) * canvas.width, (-(v1.y) * 0.5 + 0.5) * canvas.height);
-        r.ctxGuide!.lineTo((v2.x * 0.5 + 0.5) * canvas.width, (-(v2.y) * 0.5 + 0.5) * canvas.height);
+        r.ctxGuide!.moveTo((v1.x * 0.5 + 0.5) * canvas.clientWidth, (-(v1.y) * 0.5 + 0.5) * canvas.clientHeight);
+        r.ctxGuide!.lineTo((v2.x * 0.5 + 0.5) * canvas.clientWidth, (-(v2.y) * 0.5 + 0.5) * canvas.clientHeight);
         r.ctxGuide!.stroke();
       };
       drawLine(tPoints[0], tPoints[1]);
@@ -329,8 +329,8 @@ export default function SphereMode() {
       tPoints.forEach(p => {
         const v = p.clone().applyMatrix4(r.targetGroup!.matrixWorld).project(r.camera!);
         if (v.z > 1) return;
-        const x = (v.x * 0.5 + 0.5) * canvas.width;
-        const y = (-(v.y) * 0.5 + 0.5) * canvas.height;
+        const x = (v.x * 0.5 + 0.5) * canvas.clientWidth;
+        const y = (-(v.y) * 0.5 + 0.5) * canvas.clientHeight;
         r.ctxGuide!.beginPath();
         r.ctxGuide!.arc(x, y, 5, 0, Math.PI * 2);
         r.ctxGuide!.fill();
@@ -345,8 +345,8 @@ export default function SphereMode() {
       const v = new THREE.Vector3().fromBufferAttribute(posAttr, i).applyMatrix4(r.boundingBoxMesh.matrixWorld);
       const dist = r.camera.position.distanceTo(v);
       v.project(r.camera);
-      const x = (v.x * 0.5 + 0.5) * canvas.width;
-      const y = (-(v.y) * 0.5 + 0.5) * canvas.height;
+      const x = (v.x * 0.5 + 0.5) * canvas.clientWidth;
+      const y = (-(v.y) * 0.5 + 0.5) * canvas.clientHeight;
       if(dist < closestDist) { closestDist = dist; startPoint = {x, y}; }
     }
     if(startPoint) {
@@ -361,7 +361,7 @@ export default function SphereMode() {
     if (!r.ctxAnswer || !r.answerMesh || !r.camera || !r.targetGroup) return;
     const canvas = answerCanvasRef.current!;
 
-    r.ctxAnswer.clearRect(0, 0, canvas.width, canvas.height);
+    r.ctxAnswer.clearRect(0, 0, canvas.clientWidth, canvas.clientHeight);
     
     const children = r.answerMesh.children;
     if (children && children.length > 0) {
@@ -383,8 +383,8 @@ export default function SphereMode() {
             const v = new THREE.Vector3().fromBufferAttribute(positions, i);
             v.applyMatrix4(child.matrixWorld).project(r.camera!);
             if (v.z > 1) continue;
-            const x = (v.x * 0.5 + 0.5) * canvas.width;
-            const y = (-(v.y) * 0.5 + 0.5) * canvas.height;
+            const x = (v.x * 0.5 + 0.5) * canvas.clientWidth;
+            const y = (-(v.y) * 0.5 + 0.5) * canvas.clientHeight;
             if (i === 0) r.ctxAnswer!.moveTo(x, y);
             else r.ctxAnswer!.lineTo(x, y);
           }

@@ -269,8 +269,8 @@ export default function CircleMode() {
     p1_clip.applyMatrix4(r.camera.projectionMatrix);
     p2_clip.applyMatrix4(r.camera.projectionMatrix);
     
-    const w = canvas.width;
-    const h = canvas.height;
+    const w = canvas.clientWidth;
+    const h = canvas.clientHeight;
     
     const x1 = (p1_clip.x * 0.5 + 0.5) * w;
     const y1 = (-(p1_clip.y) * 0.5 + 0.5) * h;
@@ -288,7 +288,7 @@ export default function CircleMode() {
     if (!r.ctxGuide || !r.boundingBoxMesh || !r.camera) return;
     const canvas = guideCanvasRef.current!;
 
-    r.ctxGuide.clearRect(0, 0, canvas.width, canvas.height);
+    r.ctxGuide.clearRect(0, 0, canvas.clientWidth, canvas.clientHeight);
 
     if (visRef.current.isGridVisible && r.gridGroup) {
       r.ctxGuide.strokeStyle = 'rgba(0, 122, 255, 0.15)';
@@ -322,8 +322,8 @@ export default function CircleMode() {
       const v = new THREE.Vector3().fromBufferAttribute(posAttr, i).applyMatrix4(r.boundingBoxMesh.matrixWorld);
       const dist = r.camera.position.distanceTo(v);
       v.project(r.camera);
-      const x = (v.x * 0.5 + 0.5) * canvas.width;
-      const y = (-(v.y) * 0.5 + 0.5) * canvas.height;
+      const x = (v.x * 0.5 + 0.5) * canvas.clientWidth;
+      const y = (-(v.y) * 0.5 + 0.5) * canvas.clientHeight;
       if(dist < closestDist) { closestDist = dist; startPoint = {x, y}; }
     }
     if(startPoint) {
@@ -338,7 +338,7 @@ export default function CircleMode() {
     if (!r.ctxAnswer || !r.answerGroup || !r.camera) return;
     const canvas = answerCanvasRef.current!;
 
-    r.ctxAnswer.clearRect(0, 0, canvas.width, canvas.height);
+    r.ctxAnswer.clearRect(0, 0, canvas.clientWidth, canvas.clientHeight);
     r.ctxAnswer.strokeStyle = '#ff3b30'; 
     r.ctxAnswer.lineWidth = 3;
 
@@ -358,8 +358,8 @@ export default function CircleMode() {
         v.applyMatrix4(circleMesh.matrixWorld); 
         v.project(r.camera!); 
         
-        const px = (v.x * 0.5 + 0.5) * canvas.width;
-        const py = (-(v.y) * 0.5 + 0.5) * canvas.height;
+        const px = (v.x * 0.5 + 0.5) * canvas.clientWidth;
+        const py = (-(v.y) * 0.5 + 0.5) * canvas.clientHeight;
         
         if (i === 0) r.ctxAnswer!.moveTo(px, py);
         else r.ctxAnswer!.lineTo(px, py);
@@ -378,8 +378,8 @@ export default function CircleMode() {
         v.applyMatrix4(circleMesh.matrixWorld); 
         v.project(r.camera!); 
         
-        const px = (v.x * 0.5 + 0.5) * canvas.width;
-        const py = (-(v.y) * 0.5 + 0.5) * canvas.height;
+        const px = (v.x * 0.5 + 0.5) * canvas.clientWidth;
+        const py = (-(v.y) * 0.5 + 0.5) * canvas.clientHeight;
         
         if (i === 0) r.ctxAnswer!.moveTo(px, py);
         else r.ctxAnswer!.lineTo(px, py);
