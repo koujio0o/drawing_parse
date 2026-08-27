@@ -80,12 +80,15 @@ function usePerspectiveCamera(options: UsePerspectiveCameraOptions): Perspective
   } = options;
 
   // --- React state (for UI binding) ---
-  const [fov, setFov] = useState(initialFov);
+  const [fov, setFov] = useState(() => {
+    const saved = localStorage.getItem('globalFov');
+    return saved ? parseInt(saved, 10) : initialFov;
+  });
   const [rx, setRx] = useState(initialRx);
   const [ry, setRy] = useState(initialRy);
 
   // --- Synchronous ref for render loops ---
-  const sr = useRef({ fov: initialFov, rx: initialRx, ry: initialRy, zoom: initialZoom });
+  const sr = useRef({ fov, rx: initialRx, ry: initialRy, zoom: initialZoom });
 
   // Stable ref for onRender so callbacks don't need it as a dep
   const onRenderRef = useRef(onRender);
@@ -101,6 +104,7 @@ function usePerspectiveCamera(options: UsePerspectiveCameraOptions): Perspective
   const setFovSync = useCallback((v: number) => {
     sr.current.fov = v;
     setFov(v);
+    localStorage.setItem('globalFov', v.toString());
     onRenderRef.current();
   }, []);
 

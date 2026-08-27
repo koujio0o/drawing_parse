@@ -13,9 +13,18 @@ export default function EyeLevelMode() {
   const [isAnswerVisible, setIsAnswerVisible] = useState(false);
   const [isExporting, setIsExporting] = useState(false);
 
+  const [fov, setFov] = useState(() => {
+    const saved = localStorage.getItem('globalFov');
+    return saved ? parseInt(saved, 10) : 50;
+  });
+  const [hintRatio, setHintRatio] = useState(() => {
+    const saved = localStorage.getItem('eyeLevelHintRatio');
+    return saved ? parseFloat(saved) : 0.25;
+  });
+
   const sr = useRef({ 
     zoom: 1.0, isAnswerVisible: false, 
-    cubeYOffset: 0, fov: 50
+    cubeYOffset: 0, fov, hintRatio
   });
 
   const refs = useRef({
@@ -41,8 +50,8 @@ export default function EyeLevelMode() {
     
     // Position camera
     r.camera.fov = state.fov;
-    const baseZ = 20;
-    r.camera.position.set(0, 0, baseZ / state.zoom);
+    const baseZ = 12; // Adjusted baseZ to look good with FOV formula
+    r.camera.position.set(0, 0, (baseZ / Math.tan(((state.fov * Math.PI) / 180) / 2)) / state.zoom);
     r.camera.lookAt(0, 0, 0);
     r.camera.updateProjectionMatrix();
 
@@ -50,6 +59,20 @@ export default function EyeLevelMode() {
 
     if (r.answerGroup) r.answerGroup.visible = state.isAnswerVisible;
     r.mainRenderer.render(r.scene, r.camera);
+  };
+
+  const setFovSync = (v: number) => {
+    sr.current.fov = v;
+    setFov(v);
+    localStorage.setItem('globalFov', v.toString());
+    renderScene();
+  };
+
+  const setHintRatioSync = (v: number) => {
+    sr.current.hintRatio = v;
+    setHintRatio(v);
+    localStorage.setItem('eyeLevelHintRatio', v.toString());
+    generateRandomScene(true); // Re-generate scene with new hint length
   };
 
   const setZoomSync = (v: number | ((z: number) => number)) => {
@@ -129,7 +152,7 @@ export default function EyeLevelMode() {
     group.add(mesh);
   };
 
-  const generateRandomScene = () => {
+  const generateRandomScene = (keepOffset: boolean = false) => {
     const r = refs.current;
     if (!r.scene) return;
 
@@ -147,39 +170,30 @@ export default function EyeLevelMode() {
     r.targetGroup = new THREE.Group();
     r.answerGroup = new THREE.Group();
 
-    // Scale up everything for better visibility
     const S = 6; 
     
-    // We want the cube to be randomly shifted vertically so the horizon hits at a random height.
-    // The cube's vertical height spans 1.0 (from -0.5 to 0.5 in local coordinates).
-    // Let's generate an offset between -0.4 and 0.4.
-    const yOffset = (Math.random() * 0.8 - 0.4) * S;
-    sr.current.cubeYOffset = yOffset;
+    if (!keepOffset) {
+      sr.current.cubeYOffset = (Math.random() * 0.8 - 0.4) * S;
+    }
+    const yOffset = sr.current.cubeYOffset;
 
-    // A group to hold all cubes, centered at 0,0,0 originally, but we'll shift it
     const allCubesGroup = new THREE.Group();
     allCubesGroup.position.y = yOffset;
     
-    // Rotate exactly 45 degrees so left/right vanishing points are symmetric
     allCubesGroup.rotation.y = -Math.PI / 4;
 
-    // Draw the 1x1 base cube (offset so its front corner is at local origin)
-    // Front edge at (0, y, 0), Left depth along -X, Right depth along -Z
     const cubeGeo = new THREE.BoxGeometry(S, S, S);
     
     const faceMat = new THREE.MeshBasicMaterial({ color: 0x64b5f6, transparent: true, opacity: 0.15, polygonOffset: true, polygonOffsetFactor: 1, polygonOffsetUnits: 1 });
-    const edgeMat = new THREE.MeshBasicMaterial({ color: 0x333333 }); // Normal edge
-    const refEdgeMat = new THREE.MeshBasicMaterial({ color: 0xab47bc }); // Purple reference edge
+    const edgeMat = new THREE.MeshBasicMaterial({ color: 0x333333 }); 
+    const refEdgeMat = new THREE.MeshBasicMaterial({ color: 0xab47bc }); 
 
-    // Helper to add a cube
     const addCube = (ix: number, iz: number, isAnswer: boolean) => {
-      // Create a cube centered such that if ix=0, iz=0, its front-most edge is at (0,0,0)
       const mesh = new THREE.Mesh(cubeGeo, faceMat);
       mesh.position.set(-S/2 - ix*S, 0, -S/2 - iz*S);
       
       const groupToAddTo = isAnswer ? r.answerGroup : r.targetGroup;
       
-      // We wrap it in a small group to position it locally inside allCubesGroup
       const wrapper = new THREE.Group();
       wrapper.add(mesh);
       
@@ -189,27 +203,22 @@ export default function EyeLevelMode() {
         const p1 = new THREE.Vector3(pos[i], pos[i+1], pos[i+2]).add(mesh.position);
         const p2 = new THREE.Vector3(pos[i+3], pos[i+4], pos[i+5]).add(mesh.position);
         
-        // Don't draw the front vertical edge here, we draw it manually outside
-        if (!isAnswer) continue; // In target group we only draw the single front edge, no other cubes!
+        if (!isAnswer) continue; 
         
-        // Wait, for answerGroup, draw all edges
         addThickLine(wrapper, p1, p2, edgeMat, 0.04);
       }
       groupToAddTo!.add(wrapper);
     };
 
-    // ONLY the front vertical edge for the Target group (problem statement)
     const pTop = new THREE.Vector3(0, S/2, 0);
     const pBot = new THREE.Vector3(0, -S/2, 0);
     addThickLine(r.targetGroup, pTop.clone().add(allCubesGroup.position), pBot.clone().add(allCubesGroup.position), refEdgeMat, 0.08);
 
-    // Answer: 3 cubes extending to the left only
     for (let ix = 0; ix < 3; ix++) {
       addCube(ix, 0, true);
     }
     
-    // Hint: Short line for the bottom-left edge (チラ見せ)
-    const hintLength = S * 0.25; // 25% of the edge length
+    const hintLength = S * sr.current.hintRatio; // Use state variable for hint length
     const pHintLocal = new THREE.Vector3(-hintLength, -S/2, 0);
     pHintLocal.applyAxisAngle(new THREE.Vector3(0, 1, 0), -Math.PI / 4);
     pHintLocal.add(allCubesGroup.position);
@@ -407,6 +416,18 @@ export default function EyeLevelMode() {
 
   return (
     <>
+      {/* Top-left: perspective sliders */}
+      <div className="glass-panel" style={{ position: 'absolute', top: 20, left: 20, padding: 16, zIndex: 20, width: 220 }}>
+        <div style={{ marginBottom: 12, fontSize: 14, fontWeight: 'bold' }}>
+          <label>パースの強さ: <span>{fov}</span></label>
+          <input type="range" min={30} max={150} value={fov} onChange={e => setFovSync(Number(e.target.value))} style={{ width: '100%', marginTop: 6 }} />
+        </div>
+        <div style={{ fontSize: 14, fontWeight: 'bold' }}>
+          <label>チラ見せ線の長さ: <span>{Math.round(hintRatio * 100)}%</span></label>
+          <input type="range" min={0} max={100} value={Math.round(hintRatio * 100)} onChange={e => setHintRatioSync(Number(e.target.value) / 100)} style={{ width: '100%', marginTop: 6 }} />
+        </div>
+      </div>
+
       <canvas ref={mainCanvasRef} className="layer-canvas" style={{ zIndex: 5 }} />
       <canvas 
         ref={drawCanvasRef} 
