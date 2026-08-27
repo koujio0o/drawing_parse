@@ -8,9 +8,12 @@ import SphereContourMode from './components/SphereContourMode';
 import DiagonalCubeMode from './components/DiagonalCubeMode';
 import RatioCuboidMode from './components/RatioCuboidMode';
 import RatioPlaneMode from './components/RatioPlaneMode';
+import EyeLevelMode from './components/EyeLevelMode';
+
+// ... (skip lines to reach the component, I'll need to use proper StartLine and EndLine)
 
 function App() {
-  const [activeTab, setActiveTab] = useState<'proliferation' | 'circle' | 'subtraction' | 'sphere' | 'sphere_contour' | 'diagonal_cube' | 'ratio_cuboid' | 'ratio_plane'>('ratio_cuboid');
+  const [activeTab, setActiveTab] = useState<'proliferation' | 'circle' | 'subtraction' | 'sphere' | 'sphere_contour' | 'diagonal_cube' | 'ratio_cuboid' | 'ratio_plane' | 'eye_level'>('ratio_cuboid');
 
   return (
     <div className="app-container" style={{ width: '100vw', height: '100dvh', position: 'relative', overflow: 'hidden' }}>
@@ -86,6 +89,13 @@ function App() {
         >
           比率(平面)
         </button>
+        <button 
+          className={`glass-button ${activeTab === 'eye_level' ? 'btn-primary' : 'btn-light'}`}
+          onClick={() => setActiveTab('eye_level')}
+          style={{ padding: '8px 24px', borderRadius: '24px', boxShadow: 'none' }}
+        >
+          アイレベル
+        </button>
       </header>
 
       {/* Main Content Area */}
@@ -98,6 +108,7 @@ function App() {
         {activeTab === 'diagonal_cube' && <DiagonalCubeMode />}
         {activeTab === 'ratio_cuboid' && <RatioCuboidMode />}
         {activeTab === 'ratio_plane' && <RatioPlaneMode />}
+        {activeTab === 'eye_level' && <EyeLevelMode />}
       </div>
 
     </div>
