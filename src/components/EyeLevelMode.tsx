@@ -470,7 +470,7 @@ export default function EyeLevelMode() {
 
       <div style={{ position: 'absolute', bottom: 30, left: '50%', transform: 'translateX(-50%)', zIndex: 20, display: 'flex', gap: 12 }}>
         <button className="glass-button btn-light" onClick={() => { refs.current.ctxDraw?.clearRect(0, 0, drawCanvasRef.current!.width, drawCanvasRef.current!.height); refs.current.undoStack.push(refs.current.ctxDraw!.getImageData(0, 0, drawCanvasRef.current!.width, drawCanvasRef.current!.height)); }}>全消去</button>
-        <button className="glass-button btn-success" onClick={generateRandomScene}>次のお題</button>
+        <button className="glass-button btn-success" onClick={() => generateRandomScene()}>次のお題</button>
         <button className={`glass-button ${isAnswerVisible ? 'btn-danger' : 'btn-primary'}`} style={{ width: 140 }} onClick={() => setAnswerSync(!isAnswerVisible)}>
           {isAnswerVisible ? '答えを隠す' : '答え合わせ'}
         </button>
