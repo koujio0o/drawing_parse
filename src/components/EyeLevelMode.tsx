@@ -25,10 +25,19 @@ export default function EyeLevelMode() {
     const saved = localStorage.getItem('eyeLevelEyeLineRange');
     return saved ? parseInt(saved, 10) : 0;
   });
+  const [showFullBottomEdge, setShowFullBottomEdge] = useState(() => {
+    const saved = localStorage.getItem('eyeLevelShowFullBottomEdge');
+    return saved ? saved === 'true' : false;
+  });
+  const [eyeLineLengthUI, setEyeLineLengthUI] = useState(() => {
+    const saved = localStorage.getItem('eyeLevelEyeLineLengthUI');
+    return saved ? parseInt(saved, 10) : 30;
+  });
 
   const sr = useRef({ 
     zoom: 1.0, isAnswerVisible: false, 
     cubeYOffset: 0, fov, hintLengthUI, eyeLineRange,
+    showFullBottomEdge, eyeLineLengthUI,
     S: 6, baseZ: 12
   });
 
@@ -83,6 +92,20 @@ export default function EyeLevelMode() {
     sr.current.eyeLineRange = v;
     setEyeLineRange(v);
     localStorage.setItem('eyeLevelEyeLineRange', v.toString());
+    generateRandomScene(true);
+  };
+
+  const setShowFullBottomEdgeSync = (v: boolean) => {
+    sr.current.showFullBottomEdge = v;
+    setShowFullBottomEdge(v);
+    localStorage.setItem('eyeLevelShowFullBottomEdge', v.toString());
+    generateRandomScene(true);
+  };
+
+  const setEyeLineLengthUISync = (v: number) => {
+    sr.current.eyeLineLengthUI = v;
+    setEyeLineLengthUI(v);
+    localStorage.setItem('eyeLevelEyeLineLengthUI', v.toString());
     generateRandomScene(true);
   };
 
@@ -234,17 +257,22 @@ export default function EyeLevelMode() {
       addCube(ix, 0, true);
     }
     
-    const hintLength = sr.current.hintLengthUI * 0.05; // decoupled absolute length
-    const pHintLocal = new THREE.Vector3(-hintLength, -S/2, 0);
-    pHintLocal.applyAxisAngle(new THREE.Vector3(0, 1, 0), -Math.PI / 4);
-    pHintLocal.add(allCubesGroup.position);
-    addThickLine(r.targetGroup, pBot.clone().add(allCubesGroup.position), pHintLocal, refEdgeMat, 0.08);
+    // Hint: Short line for the bottom-left edge (チラ見せ) or full edge
+    const hintLength = sr.current.showFullBottomEdge ? S : (sr.current.hintLengthUI * 0.05); // decoupled absolute length, or full edge S
+    if (hintLength > 0.01) {
+      const pHintLocal = new THREE.Vector3(-hintLength, -S/2, 0);
+      pHintLocal.applyAxisAngle(new THREE.Vector3(0, 1, 0), -Math.PI / 4);
+      pHintLocal.add(allCubesGroup.position);
+      addThickLine(r.targetGroup, pBot.clone().add(allCubesGroup.position), pHintLocal, refEdgeMat, 0.08);
+    }
 
     // The eye level mark (a short horizontal line at y=0, since camera is at y=0)
-    const markLength = 1.0;
-    const pLeft = new THREE.Vector3(-markLength/2, 0, 0);
-    const pRight = new THREE.Vector3(markLength/2, 0, 0);
-    addThickLine(r.targetGroup, pLeft, pRight, refEdgeMat, 0.05);
+    const markLength = sr.current.eyeLineLengthUI * 0.05;
+    if (markLength > 0.01) {
+      const pLeft = new THREE.Vector3(-markLength/2, 0, 0);
+      const pRight = new THREE.Vector3(markLength/2, 0, 0);
+      addThickLine(r.targetGroup, pLeft, pRight, refEdgeMat, 0.05);
+    }
 
     // Apply the 45 deg rotation to the answer group (and we've already manually applied it to the single edge by adding allCubesGroup.position, wait!
     // For the front edge: its local X, Z is 0. So rotating it on Y doesn't change its world position! It's perfectly safe to just apply y offset.
@@ -439,8 +467,18 @@ export default function EyeLevelMode() {
           <input type="range" min={30} max={150} value={fov} onChange={e => setFovSync(Number(e.target.value))} style={{ width: '100%', marginTop: 6 }} />
         </div>
         <div style={{ marginBottom: 12, fontSize: 14, fontWeight: 'bold' }}>
-          <label>チラ見せ線の長さ: <span>{hintLengthUI} px</span></label>
-          <input type="range" min={0} max={200} value={hintLengthUI} onChange={e => setHintLengthUISync(Number(e.target.value))} style={{ width: '100%', marginTop: 6 }} />
+          <label style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+            <span>チラ見せ線の長さ</span>
+            <label style={{ fontSize: 12, fontWeight: 'normal', display: 'flex', alignItems: 'center', gap: 4 }}>
+              <input type="checkbox" checked={showFullBottomEdge} onChange={e => setShowFullBottomEdgeSync(e.target.checked)} />
+              100%
+            </label>
+          </label>
+          <input type="range" min={0} max={400} value={hintLengthUI} disabled={showFullBottomEdge} onChange={e => setHintLengthUISync(Number(e.target.value))} style={{ width: '100%', marginTop: 6 }} />
+        </div>
+        <div style={{ marginBottom: 12, fontSize: 14, fontWeight: 'bold' }}>
+          <label>アイラインの長さ</label>
+          <input type="range" min={0} max={400} value={eyeLineLengthUI} onChange={e => setEyeLineLengthUISync(Number(e.target.value))} style={{ width: '100%', marginTop: 6 }} />
         </div>
         <div style={{ fontSize: 14, fontWeight: 'bold' }}>
           <label>アイラインの範囲拡張: <span>+{eyeLineRange}%</span></label>
