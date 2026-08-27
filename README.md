@@ -42,3 +42,15 @@ If you are developing a production application, we recommend enabling type-aware
 ```
 
 See the [Oxlint rules documentation](https://oxc.rs/docs/guide/usage/linter/rules) for the full list of rules and categories.
+
+## Deploy (デプロイ方法)
+
+このプロジェクトは GitHub Actions を使用して GitHub Pages に自動デプロイされるよう設定されています。
+変更をコミットし、以下のコマンドで GitHub にプッシュすることでデプロイが実行されます。
+
+```bash
+git add .
+git commit -m "コミットメッセージ"
+git push origin phase-2-strokes-orbit
+```
+※ `main` ブランチへプッシュした場合も同様にデプロイされます。

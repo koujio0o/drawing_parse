@@ -87,8 +87,8 @@ const useDrawingCanvas = ({
         const p = stroke.points[0];
         ctx.beginPath();
         ctx.fillStyle = isEraser ? 'rgba(0,0,0,1)' : stroke.color;
-        // For a single point, just draw a dot. Using pressure if > 0.
-        const width = p.pressure > 0 ? p.pressure * stroke.width * 2 : stroke.width;
+        // For a single point, just draw a dot.
+        const width = stroke.width;
         ctx.arc(p.x, p.y, width / 2, 0, Math.PI * 2);
         ctx.fill();
         continue;
@@ -103,7 +103,7 @@ const useDrawingCanvas = ({
         ctx.lineTo(p2.x, p2.y);
         ctx.strokeStyle = isEraser ? 'rgba(0,0,0,1)' : stroke.color;
         
-        const segmentWidth = p2.pressure > 0 ? p2.pressure * stroke.width * 2 : stroke.width;
+        const segmentWidth = stroke.width;
         ctx.lineWidth = segmentWidth;
         ctx.stroke();
       }
@@ -119,7 +119,7 @@ const useDrawingCanvas = ({
       if (!ctx) return;
 
       isDrawingRef.current = true;
-      const point = { x: e.clientX, y: e.clientY, pressure: e.pressure };
+      const point = { x: e.clientX, y: e.clientY };
       currentStrokeRef.current = [point];
 
       // Auto-switch to eraser if touching with finger
@@ -127,7 +127,7 @@ const useDrawingCanvas = ({
       const tool = activeToolRef.current;
 
       const baseWidth = tool === 'eraser' ? eraserWidth : penWidth;
-      const width = e.pointerType === 'pen' && e.pressure > 0 ? e.pressure * baseWidth * 2 : baseWidth;
+      const width = baseWidth;
 
       ctx.beginPath();
       ctx.arc(e.clientX, e.clientY, width / 2, 0, Math.PI * 2);
@@ -148,9 +148,9 @@ const useDrawingCanvas = ({
 
       const tool = activeToolRef.current;
       const baseWidth = tool === 'eraser' ? eraserWidth : penWidth;
-      const width = e.pointerType === 'pen' && e.pressure > 0 ? e.pressure * baseWidth * 2 : baseWidth;
+      const width = baseWidth;
 
-      const newPoint = { x: e.clientX, y: e.clientY, pressure: e.pressure };
+      const newPoint = { x: e.clientX, y: e.clientY };
       const lastPoint = currentStrokeRef.current[currentStrokeRef.current.length - 1];
 
       ctx.beginPath();
