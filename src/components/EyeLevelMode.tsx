@@ -17,14 +17,19 @@ export default function EyeLevelMode() {
     const saved = localStorage.getItem('globalFov');
     return saved ? parseInt(saved, 10) : 50;
   });
-  const [hintRatio, setHintRatio] = useState(() => {
-    const saved = localStorage.getItem('eyeLevelHintRatio');
-    return saved ? parseFloat(saved) : 0.25;
+  const [hintLengthUI, setHintLengthUI] = useState(() => {
+    const saved = localStorage.getItem('eyeLevelHintLengthUI');
+    return saved ? parseInt(saved, 10) : 30;
+  });
+  const [eyeLineRange, setEyeLineRange] = useState(() => {
+    const saved = localStorage.getItem('eyeLevelEyeLineRange');
+    return saved ? parseInt(saved, 10) : 0;
   });
 
   const sr = useRef({ 
     zoom: 1.0, isAnswerVisible: false, 
-    cubeYOffset: 0, fov, hintRatio
+    cubeYOffset: 0, fov, hintLengthUI, eyeLineRange,
+    S: 6, baseZ: 12
   });
 
   const refs = useRef({
@@ -48,10 +53,9 @@ export default function EyeLevelMode() {
     
     const state = sr.current;
     
-    // Position camera
+    // Position camera dynamically to ensure both eye line and object fit on screen
     r.camera.fov = state.fov;
-    const baseZ = 12; // Adjusted baseZ to look good with FOV formula
-    r.camera.position.set(0, 0, (baseZ / Math.tan(((state.fov * Math.PI) / 180) / 2)) / state.zoom);
+    r.camera.position.set(0, 0, (state.baseZ / Math.tan(((state.fov * Math.PI) / 180) / 2)) / state.zoom);
     r.camera.lookAt(0, 0, 0);
     r.camera.updateProjectionMatrix();
 
@@ -68,11 +72,18 @@ export default function EyeLevelMode() {
     renderScene();
   };
 
-  const setHintRatioSync = (v: number) => {
-    sr.current.hintRatio = v;
-    setHintRatio(v);
-    localStorage.setItem('eyeLevelHintRatio', v.toString());
-    generateRandomScene(true); // Re-generate scene with new hint length
+  const setHintLengthUISync = (v: number) => {
+    sr.current.hintLengthUI = v;
+    setHintLengthUI(v);
+    localStorage.setItem('eyeLevelHintLengthUI', v.toString());
+    generateRandomScene(true);
+  };
+
+  const setEyeLineRangeSync = (v: number) => {
+    sr.current.eyeLineRange = v;
+    setEyeLineRange(v);
+    localStorage.setItem('eyeLevelEyeLineRange', v.toString());
+    generateRandomScene(true);
   };
 
   const setZoomSync = (v: number | ((z: number) => number)) => {
@@ -170,11 +181,16 @@ export default function EyeLevelMode() {
     r.targetGroup = new THREE.Group();
     r.answerGroup = new THREE.Group();
 
-    const S = 6; 
-    
     if (!keepOffset) {
-      sr.current.cubeYOffset = (Math.random() * 0.8 - 0.4) * S;
+      const newS = 4 + Math.random() * 5; // Base size varies from 4 to 9
+      sr.current.S = newS;
+      const rangeRatio = sr.current.eyeLineRange / 100;
+      const maxDistance = (newS / 2) + (newS * rangeRatio);
+      sr.current.cubeYOffset = (Math.random() * 2 - 1) * maxDistance;
+      // Ensure both the eye level mark (at y=0) and the cube fit on screen
+      sr.current.baseZ = Math.max(12, Math.abs(sr.current.cubeYOffset) + newS / 2 + 2);
     }
+    const S = sr.current.S;
     const yOffset = sr.current.cubeYOffset;
 
     const allCubesGroup = new THREE.Group();
@@ -218,7 +234,7 @@ export default function EyeLevelMode() {
       addCube(ix, 0, true);
     }
     
-    const hintLength = S * sr.current.hintRatio; // Use state variable for hint length
+    const hintLength = sr.current.hintLengthUI * 0.05; // decoupled absolute length
     const pHintLocal = new THREE.Vector3(-hintLength, -S/2, 0);
     pHintLocal.applyAxisAngle(new THREE.Vector3(0, 1, 0), -Math.PI / 4);
     pHintLocal.add(allCubesGroup.position);
@@ -422,9 +438,13 @@ export default function EyeLevelMode() {
           <label>パースの強さ: <span>{fov}</span></label>
           <input type="range" min={30} max={150} value={fov} onChange={e => setFovSync(Number(e.target.value))} style={{ width: '100%', marginTop: 6 }} />
         </div>
+        <div style={{ marginBottom: 12, fontSize: 14, fontWeight: 'bold' }}>
+          <label>チラ見せ線の長さ: <span>{hintLengthUI} px</span></label>
+          <input type="range" min={0} max={200} value={hintLengthUI} onChange={e => setHintLengthUISync(Number(e.target.value))} style={{ width: '100%', marginTop: 6 }} />
+        </div>
         <div style={{ fontSize: 14, fontWeight: 'bold' }}>
-          <label>チラ見せ線の長さ: <span>{Math.round(hintRatio * 100)}%</span></label>
-          <input type="range" min={0} max={100} value={Math.round(hintRatio * 100)} onChange={e => setHintRatioSync(Number(e.target.value) / 100)} style={{ width: '100%', marginTop: 6 }} />
+          <label>アイラインの範囲拡張: <span>+{eyeLineRange}%</span></label>
+          <input type="range" min={0} max={300} step={10} value={eyeLineRange} onChange={e => setEyeLineRangeSync(Number(e.target.value))} style={{ width: '100%', marginTop: 6 }} />
         </div>
       </div>
 
