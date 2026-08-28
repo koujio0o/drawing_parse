@@ -53,10 +53,15 @@ export default function EyeLevelMode() {
     return saved ? parseInt(saved, 10) : 30;
   });
 
+  const [isSymmetrical, setIsSymmetrical] = useState(() => {
+    const saved = localStorage.getItem('eyeLevelIsSymmetrical');
+    return saved ? saved === 'true' : true;
+  });
+
   const sr = useRef({ 
     zoom: 1.0, isAnswerVisible: false, 
     cubeYOffset: 0, fov, hintLengthUI, eyeLineRange,
-    showFullBottomEdge, eyeLineLengthUI,
+    showFullBottomEdge, eyeLineLengthUI, isSymmetrical,
     S: 6, baseZ: 12
   });
 
@@ -123,6 +128,13 @@ export default function EyeLevelMode() {
     sr.current.eyeLineLengthUI = v;
     setEyeLineLengthUI(v);
     localStorage.setItem('eyeLevelEyeLineLengthUI', v.toString());
+    generateRandomScene(true);
+  };
+
+  const setIsSymmetricalSync = (v: boolean) => {
+    sr.current.isSymmetrical = v;
+    setIsSymmetrical(v);
+    localStorage.setItem('eyeLevelIsSymmetrical', v.toString());
     generateRandomScene(true);
   };
 
@@ -223,10 +235,17 @@ export default function EyeLevelMode() {
     const S = sr.current.S;
     const yOffset = sr.current.cubeYOffset;
 
+    let rotY = -Math.PI / 4;
+    if (!sr.current.isSymmetrical) {
+      const isSteep = Math.random() > 0.5;
+      const angleDeg = isSteep ? (Math.random() * 20 + 60) : (Math.random() * 20 + 10);
+      rotY = -angleDeg * Math.PI / 180;
+    }
+
     const allCubesGroup = new THREE.Group();
     allCubesGroup.position.y = yOffset;
     
-    allCubesGroup.rotation.y = -Math.PI / 4;
+    allCubesGroup.rotation.y = rotY;
 
     const cubeGeo = new THREE.BoxGeometry(S, S, S);
     
@@ -268,7 +287,7 @@ export default function EyeLevelMode() {
     const hintLength = sr.current.showFullBottomEdge ? S : (sr.current.hintLengthUI * 0.05); // decoupled absolute length, or full edge S
     if (hintLength > 0.01) {
       const pHintLocal = new THREE.Vector3(-hintLength, -S/2, 0);
-      pHintLocal.applyAxisAngle(new THREE.Vector3(0, 1, 0), -Math.PI / 4);
+      pHintLocal.applyAxisAngle(new THREE.Vector3(0, 1, 0), rotY);
       pHintLocal.add(allCubesGroup.position);
       addThickLine(r.targetGroup, pBot.clone().add(allCubesGroup.position), pHintLocal, refEdgeMat, 0.08);
     }
@@ -285,7 +304,7 @@ export default function EyeLevelMode() {
     // For the front edge: its local X, Z is 0. So rotating it on Y doesn't change its world position! It's perfectly safe to just apply y offset.
     // But for the answerGroup, we must rotate it.
     r.answerGroup!.position.y = yOffset;
-    r.answerGroup!.rotation.y = -Math.PI / 4;
+    r.answerGroup!.rotation.y = rotY;
 
     r.answerGroup!.visible = sr.current.isAnswerVisible;
     r.targetGroup.add(r.answerGroup!);
@@ -370,6 +389,12 @@ export default function EyeLevelMode() {
     <>
       {/* Top-left: perspective sliders */}
       <div className="glass-panel" style={{ position: 'absolute', top: 20, left: 20, padding: 16, zIndex: 20, width: 220 }}>
+        <div style={{ marginBottom: 12, fontSize: 14, fontWeight: 'bold' }}>
+          <label style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+            <input type="checkbox" checked={isSymmetrical} onChange={e => setIsSymmetricalSync(e.target.checked)} />
+            左右対称
+          </label>
+        </div>
         <div style={{ marginBottom: 12, fontSize: 14, fontWeight: 'bold' }}>
           <label>パースの強さ: <span>{fov}</span></label>
           <input type="range" min={30} max={150} value={fov} onChange={e => setFovSync(Number(e.target.value))} style={{ width: '100%', marginTop: 6 }} />
