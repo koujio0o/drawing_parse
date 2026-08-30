@@ -9,11 +9,12 @@ import DiagonalCubeMode from './components/DiagonalCubeMode';
 import RatioCuboidMode from './components/RatioCuboidMode';
 import RatioPlaneMode from './components/RatioPlaneMode';
 import EyeLevelMode from './components/EyeLevelMode';
+import SymmetryMode from './components/SymmetryMode';
 
 // ... (skip lines to reach the component, I'll need to use proper StartLine and EndLine)
 
 function App() {
-  const [activeTab, setActiveTab] = useState<'proliferation' | 'circle' | 'subtraction' | 'sphere' | 'sphere_contour' | 'diagonal_cube' | 'ratio_cuboid' | 'ratio_plane' | 'eye_level'>('ratio_cuboid');
+  const [activeTab, setActiveTab] = useState<'proliferation' | 'circle' | 'subtraction' | 'sphere' | 'sphere_contour' | 'diagonal_cube' | 'ratio_cuboid' | 'ratio_plane' | 'eye_level' | 'symmetry'>('ratio_cuboid');
 
   return (
     <div className="app-container" style={{ width: '100vw', height: '100dvh', position: 'relative', overflow: 'hidden' }}>
@@ -100,6 +101,13 @@ function App() {
         >
           アイレベル
         </button>
+        <button 
+          className={`glass-button ${activeTab === 'symmetry' ? 'btn-primary' : 'btn-light'}`}
+          onClick={() => setActiveTab('symmetry')}
+          style={{ padding: '8px 12px', borderRadius: '24px', boxShadow: 'none' }}
+        >
+          対称描画
+        </button>
       </header>
 
       {/* Main Content Area */}
@@ -112,7 +120,8 @@ function App() {
         {activeTab === 'diagonal_cube' && <DiagonalCubeMode />}
         {activeTab === 'ratio_cuboid' && <RatioCuboidMode />}
         {activeTab === 'ratio_plane' && <RatioPlaneMode />}
-        {activeTab === 'eye_level' && <EyeLevelMode />}
+                {activeTab === 'eye_level' && <EyeLevelMode />}
+        {activeTab === 'symmetry' && <SymmetryMode />}
       </div>
 
     </div>
