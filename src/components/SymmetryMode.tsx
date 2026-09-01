@@ -166,64 +166,91 @@ export default function SymmetryMode() {
     r.targetGroup = new THREE.Group();
     r.answerGroup = new THREE.Group();
     
-    const B = 2; // Block size
     const faceMat = new THREE.MeshStandardMaterial({ color: 0x88ccff, roughness: 0.7, polygonOffset: true, polygonOffsetFactor: 1, polygonOffsetUnits: 1 });
     const edgeMat = new THREE.LineBasicMaterial({ color: 0x333333 });
     const ansFaceMat = new THREE.MeshStandardMaterial({ color: 0xffa726, roughness: 0.7, polygonOffset: true, polygonOffsetFactor: 1, polygonOffsetUnits: 1 });
     const ansEdgeMat = new THREE.LineBasicMaterial({ color: 0x8c3b00 });
 
-    const createBox = (x: number, y: number, z: number, depth: number, isAnswer: boolean) => {
-      const geo = new THREE.BoxGeometry(B, B, depth);
-      const mesh = new THREE.Mesh(geo, isAnswer ? ansFaceMat : faceMat);
-      mesh.position.set(x, y, z);
-      
-      const edges = new THREE.EdgesGeometry(geo);
-      const line = new THREE.LineSegments(edges, isAnswer ? ansEdgeMat : edgeMat);
-      mesh.add(line);
-      
-      return mesh;
-    };
-
     const isExtrude = sr.current.isExtrudeOnly;
-    const depth = isExtrude ? 1 : 3;
-    const blockDepth = isExtrude ? B * 1.5 : B;
 
-    // Generate grid
-    for (let x_idx = 0; x_idx < 3; x_idx++) {
-      for (let y_idx = 0; y_idx < 5; y_idx++) {
-        for (let z_idx = 0; z_idx < depth; z_idx++) {
-          
-          // Probability
-          let prob = 0.5;
-          if (x_idx === 0) prob = 0.8;
-          if (x_idx === 2) prob = 0.3;
-          if (y_idx === 0 || y_idx === 4) prob -= 0.1;
+    if (isExtrude) {
+      // Extrude Alphabet Letters
+      const profiles = [
+        [ [0, 10], [4, 10], [4, 8], [1, 8], [1, 0], [0, 0] ], // T
+        [ [0, 6], [2, 6], [2, 10], [4, 10], [4, 0], [2, 0], [2, 4], [0, 4] ], // H
+        [ [0, 0], [1, 0], [4, 10], [2, 10] ], // V
+        [ [0, 5], [0, 8], [2, 10], [4, 10], [4, 0], [2, 0], [2, 8] ], // M
+        [ [0, 0], [1, 0], [1, 5], [4, 10], [2, 10], [0, 6] ], // Y
+        [ [0, 0], [4, 0], [4, 10], [2, 10], [2, 2], [0, 2] ], // U
+        [ [0, 4], [2, 0], [4, 0], [1.5, 5], [4, 10], [2, 10], [0, 6] ], // X
+        [ [0, 10], [3, 10], [3, 8], [1, 8], [1, 2], [3, 2], [3, 0], [0, 0] ], // I
+        [ [0, 10], [2, 10], [4, 0], [2, 0], [1.5, 3], [0, 3], [0, 5], [1.1, 5], [0.5, 8], [0, 8] ] // A
+      ];
+      const profile = profiles[Math.floor(Math.random() * profiles.length)];
 
-          if (Math.random() < prob) {
-            const Y = (y_idx - 2) * B;
-            const Z = isExtrude ? 0 : (z_idx - 1) * B;
-            
-            // Right half (target)
-            const targetX = (x_idx + 0.5) * B;
-            r.targetGroup.add(createBox(targetX, Y, Z, blockDepth, false));
-            
-            // Left half (answer)
-            const ansX = -(x_idx + 0.5) * B;
-            r.answerGroup.add(createBox(ansX, Y, Z, blockDepth, true));
-          }
-        }
+      const rightShape = new THREE.Shape();
+      profile.forEach((pt, i) => {
+        const px = pt[0] * 1.5;
+        const py = (pt[1] - 5) * 1.5;
+        if (i === 0) rightShape.moveTo(px, py);
+        else rightShape.lineTo(px, py);
+      });
+      const extrudeRight = new THREE.ExtrudeGeometry(rightShape, { depth: 2, bevelEnabled: false });
+      extrudeRight.translate(0, 0, -1);
+      const rightMesh = new THREE.Mesh(extrudeRight, faceMat);
+      rightMesh.add(new THREE.LineSegments(new THREE.EdgesGeometry(extrudeRight), edgeMat));
+      r.targetGroup.add(rightMesh);
+
+      const leftShape = new THREE.Shape();
+      const leftProfile = [...profile].reverse();
+      leftProfile.forEach((pt, i) => {
+        const px = -pt[0] * 1.5;
+        const py = (pt[1] - 5) * 1.5;
+        if (i === 0) leftShape.moveTo(px, py);
+        else leftShape.lineTo(px, py);
+      });
+      const extrudeLeft = new THREE.ExtrudeGeometry(leftShape, { depth: 2, bevelEnabled: false });
+      extrudeLeft.translate(0, 0, -1);
+      const leftMesh = new THREE.Mesh(extrudeLeft, ansFaceMat);
+      leftMesh.add(new THREE.LineSegments(new THREE.EdgesGeometry(extrudeLeft), ansEdgeMat));
+      r.answerGroup.add(leftMesh);
+
+    } else {
+      // Lathe Geometry (Pillars / Bottles)
+      const pts = [];
+      const numPoints = 5 + Math.floor(Math.random() * 5);
+      pts.push(new THREE.Vector2(0, -8)); // close bottom
+      let lastX = 2 + Math.random() * 3;
+      for (let i = 0; i < numPoints; i++) {
+        const y = -8 + (16 / (numPoints - 1)) * i;
+        const x = lastX + (Math.random() * 4 - 2);
+        lastX = Math.max(1, Math.min(6, x));
+        pts.push(new THREE.Vector2(lastX, y));
       }
+      pts.push(new THREE.Vector2(0, 8)); // close top
+
+      // Right half (-90 to +90 deg in XZ plane)
+      const latheRight = new THREE.LatheGeometry(pts, 16, -Math.PI / 2, Math.PI);
+      const rightMesh = new THREE.Mesh(latheRight, faceMat);
+      rightMesh.add(new THREE.LineSegments(new THREE.EdgesGeometry(latheRight), edgeMat));
+      r.targetGroup.add(rightMesh);
+
+      // Left half (90 to 270 deg in XZ plane)
+      const latheLeft = new THREE.LatheGeometry(pts, 16, Math.PI / 2, Math.PI);
+      const leftMesh = new THREE.Mesh(latheLeft, ansFaceMat);
+      leftMesh.add(new THREE.LineSegments(new THREE.EdgesGeometry(latheLeft), ansEdgeMat));
+      r.answerGroup.add(leftMesh);
     }
 
     // Mirror Plane Guide (Semi-transparent plane at X=0)
-    const planeGeo = new THREE.PlaneGeometry(B * 8, B * 8);
+    const planeGeo = new THREE.PlaneGeometry(30, 30);
     const planeMat = new THREE.MeshBasicMaterial({ color: 0xffffff, transparent: true, opacity: 0.3, side: THREE.DoubleSide });
     const mirrorPlane = new THREE.Mesh(planeGeo, planeMat);
     mirrorPlane.rotation.y = Math.PI / 2;
     r.targetGroup.add(mirrorPlane);
     
     // Grid Helper on the mirror plane
-    const gridHelper = new THREE.GridHelper(B * 8, 8, 0x007aff, 0x007aff);
+    const gridHelper = new THREE.GridHelper(30, 10, 0x007aff, 0x007aff);
     gridHelper.rotation.z = Math.PI / 2;
     (gridHelper.material as THREE.Material).transparent = true;
     (gridHelper.material as THREE.Material).opacity = 0.2;
@@ -260,7 +287,7 @@ export default function SymmetryMode() {
     undoStack.reset();
     const ctx = undoStack.ctxRef.current;
     if (ctx && drawCanvasRef.current) {
-      ctx.clearRect(0, 0, drawCanvasRef.current.width, drawCanvasRef.current.height);
+      ctx.clearRect(0, 0, drawCanvasRef.current.clientWidth, drawCanvasRef.current.clientHeight);
     }
 
     renderScene();
