@@ -1,5 +1,20 @@
 import { useEffect, useRef, type RefObject } from 'react';
 
+export let globalZoomLocked = false;
+const listeners = new Set<(locked: boolean) => void>();
+
+export const setGlobalZoomLocked = (locked: boolean) => {
+  globalZoomLocked = locked;
+  listeners.forEach((l) => l(locked));
+};
+
+export const subscribeZoomLocked = (listener: (locked: boolean) => void) => {
+  listeners.add(listener);
+  return () => {
+    listeners.delete(listener);
+  };
+};
+
 /**
  * Options for the useZoomControls hook.
  */
@@ -16,6 +31,8 @@ export interface UseZoomControlsOptions {
   onZoomChange: (zoom: number) => void;
   /** Getter that returns the current zoom value. */
   getZoom: () => number;
+  /** If true, zoom interactions are disabled. */
+  isZoomLocked?: boolean;
 }
 
 /**
@@ -24,15 +41,6 @@ export interface UseZoomControlsOptions {
  * Uses the stable ref pattern: event listeners are bound once on mount
  * and read the latest callback/getter values through refs, so the
  * consumer doesn't need stable function references.
- *
- * @example
- * ```tsx
- * useZoomControls({
- *   canvasRef,
- *   onZoomChange: (z) => camera.setZoomSync(z),
- *   getZoom: () => camera.sr.current.zoom,
- * });
- * ```
  */
 function useZoomControls({
   canvasRef,
@@ -41,12 +49,13 @@ function useZoomControls({
   wheelSensitivity = 0.005,
   onZoomChange,
   getZoom,
+  isZoomLocked = false,
 }: UseZoomControlsOptions): void {
   // --- Stable ref pattern (Style A) ---
   // Store the latest options in a ref so the event handlers
   // (bound once with [] deps) always read fresh values.
-  const optRef = useRef({ minZoom, maxZoom, wheelSensitivity, onZoomChange, getZoom });
-  optRef.current = { minZoom, maxZoom, wheelSensitivity, onZoomChange, getZoom };
+  const optRef = useRef({ minZoom, maxZoom, wheelSensitivity, onZoomChange, getZoom, isZoomLocked });
+  optRef.current = { minZoom, maxZoom, wheelSensitivity, onZoomChange, getZoom, isZoomLocked };
 
   // Pinch state refs
   const initialPinchDist = useRef<number | null>(null);
@@ -67,6 +76,7 @@ function useZoomControls({
     // --- Touch handlers ---
 
     const handleTouchStart = (e: TouchEvent): void => {
+      if (optRef.current.isZoomLocked || globalZoomLocked) return;
       if (e.touches.length === 2) {
         e.preventDefault();
         initialPinchDist.current = touchDist(e.touches[0], e.touches[1]);
@@ -75,6 +85,7 @@ function useZoomControls({
     };
 
     const handleTouchMove = (e: TouchEvent): void => {
+      if (optRef.current.isZoomLocked || globalZoomLocked) return;
       if (e.touches.length === 2 && initialPinchDist.current !== null) {
         e.preventDefault();
         const { minZoom: min, maxZoom: max, onZoomChange: cb } = optRef.current;
@@ -95,6 +106,7 @@ function useZoomControls({
     // --- Wheel handler ---
 
     const handleWheel = (e: WheelEvent): void => {
+      if (optRef.current.isZoomLocked || globalZoomLocked) return;
       e.preventDefault();
       const { minZoom: min, maxZoom: max, wheelSensitivity: sens, onZoomChange: cb, getZoom: gz } =
         optRef.current;

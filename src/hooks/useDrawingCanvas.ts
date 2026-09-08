@@ -33,7 +33,8 @@ export interface UseDrawingCanvasReturn {
   handlers: {
     onPointerDown: (e: React.PointerEvent) => void;
     onPointerMove: (e: React.PointerEvent) => void;
-    onPointerUp: () => void;
+    onPointerUp: (e?: React.PointerEvent) => void;
+    onPointerCancel: (e?: React.PointerEvent) => void;
     onTouchStart: (e: React.TouchEvent) => void;
     onTouchEnd: (e: React.TouchEvent) => void;
     onTouchCancel: (e: React.TouchEvent) => void;
@@ -110,14 +111,18 @@ const useDrawingCanvas = ({
     }
   }, []);
 
+  const activePointerIdRef = useRef<number | null>(null);
+
   const onPointerDown = useCallback(
     (e: React.PointerEvent) => {
       // Allow pen, mouse, and touch
       if (e.pointerType !== 'pen' && e.pointerType !== 'mouse' && e.pointerType !== 'touch') return;
+      if (activePointerIdRef.current !== null) return; // Ignore if already drawing with another pointer
 
       const ctx = undoStack.ctxRef.current;
       if (!ctx) return;
 
+      activePointerIdRef.current = e.pointerId;
       isDrawingRef.current = true;
       const point = { x: e.clientX, y: e.clientY };
       currentStrokeRef.current = [point];
@@ -140,7 +145,7 @@ const useDrawingCanvas = ({
 
   const onPointerMove = useCallback(
     (e: React.PointerEvent) => {
-      if (!isDrawingRef.current) return;
+      if (!isDrawingRef.current || activePointerIdRef.current !== e.pointerId) return;
       if (e.pointerType !== 'pen' && e.pointerType !== 'mouse' && e.pointerType !== 'touch') return;
 
       const ctx = undoStack.ctxRef.current;
@@ -173,9 +178,12 @@ const useDrawingCanvas = ({
     [undoStack, eraserWidth, penWidth],
   );
 
-  const onPointerUp = useCallback(() => {
+  const onPointerUp = useCallback((e?: React.PointerEvent) => {
+    if (e && activePointerIdRef.current !== e.pointerId) return;
     if (!isDrawingRef.current) return;
+    
     isDrawingRef.current = false;
+    activePointerIdRef.current = null;
 
     if (currentStrokeRef.current.length > 0) {
       const stroke: Stroke = {
@@ -217,6 +225,7 @@ const useDrawingCanvas = ({
       onPointerDown, 
       onPointerMove, 
       onPointerUp,
+      onPointerCancel: onPointerUp,
       onTouchStart,
       onTouchEnd,
       onTouchCancel: onTouchEnd,

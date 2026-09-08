@@ -1,4 +1,5 @@
-import React from 'react';
+import React, { useState, useEffect } from 'react';
+import { globalZoomLocked, setGlobalZoomLocked, subscribeZoomLocked } from '../hooks/useZoomControls';
 
 /** Props for the DrawingToolbar component */
 export interface DrawingToolbarProps {
@@ -33,9 +34,49 @@ const DrawingToolbar: React.FC<DrawingToolbarProps> = ({
 }) => {
   const { currentTool, setCurrentTool, currentColor, setCurrentColor, palette } = drawing;
 
+  const [isZoomLocked, setIsZoomLocked] = useState(globalZoomLocked);
+
+  useEffect(() => {
+    return subscribeZoomLocked(setIsZoomLocked);
+  }, []);
+
+  const handleZoomLockChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    setGlobalZoomLocked(e.target.checked);
+  };
+
+  const handleTogglePenEraser = () => {
+    setCurrentTool(currentTool === 'pen' ? 'eraser' : 'pen');
+  };
+
   return (
     <>
-      {/* Bottom-right: color palette + eraser + undo */}
+      {/* Right Edge: Vertical Tool Toggle & Zoom Lock */}
+      <div className="glass-panel" style={{
+        position: 'absolute', top: '50%', right: 15, transform: 'translateY(-50%)',
+        zIndex: 25, display: 'flex', flexDirection: 'column', alignItems: 'center',
+        gap: 16, padding: '20px 10px', borderRadius: 24
+      }}>
+        <button
+          className={`glass-button ${currentTool === 'pen' ? 'btn-primary' : 'btn-light'}`}
+          onClick={handleTogglePenEraser}
+          style={{ width: 48, height: 48, padding: 0, borderRadius: '50%', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 20 }}
+          title="ペン / 消しゴム (切り替え)"
+        >
+          {currentTool === 'pen' ? '✏️' : '🧽'}
+        </button>
+
+        <label style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', fontSize: 11, fontWeight: 'bold', gap: 6, cursor: 'pointer', textAlign: 'center' }}>
+          <input
+            type="checkbox"
+            checked={isZoomLocked}
+            onChange={handleZoomLockChange}
+            style={{ width: 18, height: 18, cursor: 'pointer' }}
+          />
+          <span style={{ lineHeight: 1.2 }}>ズーム<br />ロック</span>
+        </label>
+      </div>
+
+      {/* Bottom-right: color palette + undo (eraser button removed since we have the toggle) */}
       <div className="glass-panel" style={{ position: 'absolute', bottom: 30, right: 30, zIndex: 20, display: 'flex', alignItems: 'center', gap: 10, padding: 10, borderRadius: 30 }}>
         <div style={{ display: 'flex', gap: 6, marginRight: 10, paddingRight: 10, borderRight: '1px solid rgba(0,0,0,0.1)' }}>
           {palette.map(c => (
@@ -50,7 +91,6 @@ const DrawingToolbar: React.FC<DrawingToolbarProps> = ({
             />
           ))}
         </div>
-        <button className={`btn-tool ${currentTool === 'eraser' ? 'active' : ''}`} onClick={() => setCurrentTool('eraser')}>消しゴム</button>
         <button className="btn-tool" onClick={onUndo}>↶ Undo</button>
       </div>
 
