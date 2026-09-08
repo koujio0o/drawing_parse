@@ -18,6 +18,11 @@ export default function DiagonalCubeMode() {
   const [isGridVisible, setIsGridVisible] = useState(false);
   const [isAnswerVisible, setIsAnswerVisible] = useState(false);
 
+  const [isHintVisible, setIsHintVisible] = useState(() => {
+    const saved = localStorage.getItem('diagonalIsHintVisible');
+    return saved ? saved === 'true' : true;
+  });
+
   const refs = useRef({
     scene: null as THREE.Scene | null,
     camera: null as THREE.PerspectiveCamera | null,
@@ -28,10 +33,15 @@ export default function DiagonalCubeMode() {
     gridGroup: null as THREE.Group | null,
     trackGroup: null as THREE.Group | null,
     answerGroup: null as THREE.Group | null,
+    hintGroup: null as THREE.Group | null,
   });
 
   // Synchronous visibility state for render loop
-  const visRef = useRef({ isGridVisible: false, isAnswerVisible: false });
+  const visRef = useRef({ 
+    isGridVisible: false, 
+    isAnswerVisible: false, 
+    isHintVisible: localStorage.getItem('diagonalIsHintVisible') ? localStorage.getItem('diagonalIsHintVisible') === 'true' : true 
+  });
 
   // --- Shared Hooks ---
   const undoStack = useUndoStack({ canvasRef: drawCanvasRef });
@@ -55,6 +65,8 @@ export default function DiagonalCubeMode() {
     if (r.gridGroup) r.gridGroup.visible = visRef.current.isGridVisible;
 
     r.scene.updateMatrixWorld(true);
+
+    if (r.hintGroup) r.hintGroup.visible = visRef.current.isHintVisible;
 
     // Draw Main
     if (r.trackGroup) r.trackGroup.visible = visRef.current.isAnswerVisible;
@@ -106,6 +118,7 @@ export default function DiagonalCubeMode() {
   // --- Visibility sync helpers ---
   const setGridSync = (v: boolean) => { visRef.current.isGridVisible = v; setIsGridVisible(v); renderScene(); };
   const setAnswerSync = (v: boolean) => { visRef.current.isAnswerVisible = v; setIsAnswerVisible(v); renderScene(); };
+  const setHintSync = (v: boolean) => { visRef.current.isHintVisible = v; setIsHintVisible(v); localStorage.setItem('diagonalIsHintVisible', v.toString()); renderScene(); };
 
   // --- Scene initialization ---
   useEffect(() => {
@@ -193,6 +206,7 @@ export default function DiagonalCubeMode() {
     };
 
     // --- Build Object (Problem) ---
+    const problemWrapper = new THREE.Group();
     const objectGroup = new THREE.Group();
 
     // Cube 1 (Base)
@@ -203,14 +217,14 @@ export default function DiagonalCubeMode() {
     addEdgesToGroup(cube1Group, new THREE.EdgesGeometry(geoA), blackMat);
     
     // Hints for the 45-degree cubes
+    r.hintGroup = new THREE.Group();
     const hintMat = new THREE.MeshBasicMaterial({ color: 0xff9500 });
     const s = size / 2;
     
+    // Only 2 corners now
     const corners = [
       { px: s, py: s, angle: Math.PI / 4 },
-      { px: -s, py: s, angle: Math.PI / 4 + Math.PI / 2 },
-      { px: -s, py: -s, angle: Math.PI / 4 + Math.PI },
-      { px: s, py: -s, angle: Math.PI / 4 + Math.PI * 1.5 }
+      { px: -s, py: s, angle: Math.PI / 4 + Math.PI / 2 }
     ];
 
     corners.forEach(corner => {
@@ -219,7 +233,7 @@ export default function DiagonalCubeMode() {
       const hintEdge = new THREE.Mesh(cylGeo, hintMat);
       hintEdge.position.set(px, py, 0);
       hintEdge.scale.set(1.5, 1.5, size);
-      cube1Group.add(hintEdge);
+      r.hintGroup!.add(hintEdge);
 
       const hintFlap = new THREE.Mesh(cylGeo, hintMat);
       const hDir = new THREE.Vector3(Math.cos(angle), Math.sin(angle), 0).normalize();
@@ -227,16 +241,17 @@ export default function DiagonalCubeMode() {
       hintFlap.position.copy(new THREE.Vector3(px, py, 0)).addScaledVector(hDir, hLen / 2);
       hintFlap.scale.set(1.5, 1.5, hLen);
       hintFlap.lookAt(new THREE.Vector3(px, py, 0).addScaledVector(hDir, hLen));
-      cube1Group.add(hintFlap);
+      r.hintGroup!.add(hintFlap);
     });
 
+    cube1Group.add(r.hintGroup);
     objectGroup.add(cube1Group);
 
     // Center the whole object approximately
     objectGroup.position.set(0, -size / 4, 0);
 
     // Target Group (only lines, faint faces, and hints)
-    r.targetGroup.add(objectGroup);
+    problemWrapper.add(objectGroup);
 
     // --- Track Lines (for answer mode extension) ---
     r.trackGroup = new THREE.Group();
@@ -288,7 +303,7 @@ export default function DiagonalCubeMode() {
     r.trackGroup.position.set(0, -size / 4, 0);
 
     r.trackGroup.visible = visRef.current.isAnswerVisible;
-    r.targetGroup.add(r.trackGroup);
+    problemWrapper.add(r.trackGroup);
 
     // --- Answer Group ---
     r.answerGroup = new THREE.Group();
@@ -317,7 +332,14 @@ export default function DiagonalCubeMode() {
 
     r.answerGroup.position.set(0, -size / 4, 0);
     r.answerGroup.visible = visRef.current.isAnswerVisible;
-    r.targetGroup.add(r.answerGroup);
+    problemWrapper.add(r.answerGroup);
+
+    // Randomize orientation
+    problemWrapper.rotation.x = Math.floor(Math.random() * 4) * Math.PI / 2;
+    problemWrapper.rotation.y = Math.floor(Math.random() * 4) * Math.PI / 2;
+    problemWrapper.rotation.z = Math.floor(Math.random() * 4) * Math.PI / 2;
+    
+    r.targetGroup.add(problemWrapper);
 
     // Grid
     if (r.gridGroup) {
@@ -419,7 +441,14 @@ export default function DiagonalCubeMode() {
         onAnswerToggle={() => setAnswerSync(!isAnswerVisible)}
         onNextQuestion={generateRandomBlock}
         onClearAll={() => undoStack.clearAll(doRedraw)}
-      />
+      >
+        <div style={{ marginBottom: 12, fontSize: 14, fontWeight: 'bold' }}>
+          <label style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+            <input type="checkbox" checked={isHintVisible} onChange={e => setHintSync(e.target.checked)} />
+            ヒント(45度線)を表示
+          </label>
+        </div>
+      </PerspectiveControls>
 
       <div className="glass-panel" style={{ position: 'absolute', top: 20, right: 20, width: 200, height: 200, overflow: 'hidden', zIndex: 20, padding: 0 }}>
         <div style={{ position: 'absolute', top: 0, left: 0, width: '100%', background: 'rgba(0,0,0,0.7)', color: 'white', fontSize: 12, textAlign: 'center', padding: '4px 0', zIndex: 21 }}>
