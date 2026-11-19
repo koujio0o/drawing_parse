@@ -37,6 +37,8 @@ const useCanvasResize = ({
         const ctx = drawCanvas.getContext('2d');
         if (ctx) {
           ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+          ctx.lineCap = 'round';
+          ctx.lineJoin = 'round';
         }
       }
 

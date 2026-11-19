@@ -11,6 +11,8 @@ export interface UseUndoStackOptions {
 
 /** Handle returned by the useUndoStack hook. */
 export interface UndoStackHandle {
+  /** Ref to the canvas element managed by this undo stack. */
+  canvasRef: RefObject<HTMLCanvasElement | null>;
   /** Get the current array of strokes. */
   getCurrentStrokes: () => Stroke[];
   /** Push a new stroke onto the stack. */
@@ -85,7 +87,7 @@ const useUndoStack = ({ canvasRef, maxSize = 20 }: UseUndoStackOptions): UndoSta
     historyRef.current = [[]];
   }, []);
 
-  return { getCurrentStrokes, pushStroke, performUndo, clearAll, reset, ctxRef };
+  return { canvasRef, getCurrentStrokes, pushStroke, performUndo, clearAll, reset, ctxRef };
 };
 
 export default useUndoStack;

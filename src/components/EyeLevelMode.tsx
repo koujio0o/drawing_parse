@@ -169,7 +169,17 @@ export default function EyeLevelMode() {
       const h = window.innerHeight;
       const r = refs.current;
       
-      if(drawCanvasRef.current) { drawCanvasRef.current.width = w; drawCanvasRef.current.height = h; }
+      if (drawCanvasRef.current) {
+        const dpr = window.devicePixelRatio || 1;
+        drawCanvasRef.current.width = w * dpr;
+        drawCanvasRef.current.height = h * dpr;
+        const ctx = drawCanvasRef.current.getContext('2d');
+        if (ctx) {
+          ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+          ctx.lineCap = 'round';
+          ctx.lineJoin = 'round';
+        }
+      }
       mainRenderer.setSize(w, h);
       
       doRedraw();
